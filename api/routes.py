@@ -6,6 +6,7 @@ from analysis.analyzer import AdAccountAnalyzer
 from auth.models import Client
 import logging
 import requests
+from enhanced_audit import EnhancedAdAccountAudit
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -151,25 +152,38 @@ def audit():
     connector = AdPlatformConnector(credentials)
     results = {}
     
+    # Initialize enhanced audit
+    enhanced_audit = EnhancedAdAccountAudit()
+    
     # Audit each platform if account ID is provided
     if 'facebook' in account_ids:
         fb_connected = connector.connect_facebook()
         if fb_connected:
             fb_data = connector.fetch_account_data('facebook', account_ids['facebook'], days_lookback)
-            analyzer = AdAccountAnalyzer(fb_data)
-            results['facebook'] = analyzer.run_full_analysis()
+            fb_result = enhanced_audit.run_audit(
+                fb_data,
+                platform='facebook',
+                client_name=client_name,
+                agency_name=current_user.agency_name
+            )
+            results['facebook'] = fb_result.get('analysis_results', {})
     
     if 'tiktok' in account_ids:
         tiktok_connected = connector.connect_tiktok()
         if tiktok_connected:
             tiktok_data = connector.fetch_account_data('tiktok', account_ids['tiktok'], days_lookback)
-            analyzer = AdAccountAnalyzer(tiktok_data)
-            results['tiktok'] = analyzer.run_full_analysis()
+            tiktok_result = enhanced_audit.run_audit(
+                tiktok_data,
+                platform='tiktok',
+                client_name=client_name,
+                agency_name=current_user.agency_name
+            )
+            results['tiktok'] = tiktok_result.get('analysis_results', {})
     
     # Combine recommendations from all platforms
     all_recommendations = []
     for platform, platform_results in results.items():
-        platform_recommendations = platform_results.get('prioritized_recommendations', [])
+        platform_recommendations = platform_results.get('recommendations', [])
         # Add platform identifier to recommendations
         for rec in platform_recommendations:
             rec['platform'] = platform
@@ -178,7 +192,7 @@ def audit():
     # Sort combined recommendations
     prioritized_recommendations = sorted(
         all_recommendations, 
-        key=lambda x: 'high' in str(x.get('type', '')), 
+        key=lambda x: x.get('priority_score', 0) if 'priority_score' in x else 0,
         reverse=True
     )[:15]  # Top 15 overall recommendations
     
@@ -237,13 +251,20 @@ def audit_facebook():
         # Fetch data
         fb_data = connector.fetch_account_data('facebook', account_id, days_lookback)
         
-        # Run analysis
-        analyzer = AdAccountAnalyzer(fb_data)
-        results = analyzer.run_full_analysis()
+        # Run enhanced analysis instead of original analyzer
+        enhanced_audit = EnhancedAdAccountAudit()
         
-        # Add client and user info
-        results['client_name'] = client_name
-        results['agency_name'] = current_user.agency_name
+        audit_result = enhanced_audit.run_audit(
+            fb_data,
+            platform='facebook',
+            client_name=client_name or "Facebook Ads Account",
+            agency_name=current_user.agency_name
+        )
+        
+        # Add client info
+        if 'analysis_results' in audit_result:
+            audit_result['analysis_results']['client_name'] = client_name
+            audit_result['analysis_results']['agency_name'] = current_user.agency_name
         
         # Save audit results to database if client is specified
         if client_id:
@@ -252,7 +273,7 @@ def audit_facebook():
         
         return jsonify({
             'success': True,
-            'results': results
+            'results': audit_result.get('analysis_results', audit_result)
         })
         
     except Exception as e:
@@ -273,15 +294,19 @@ def test_audit():
     # Get mock data
     mock_data = connector.fetch_account_data('facebook', '12345', days_lookback=30)
     
-    # Run analysis
-    analyzer = AdAccountAnalyzer(mock_data)
-    results = analyzer.run_full_analysis()
+    # Initialize enhanced audit
+    enhanced_audit = EnhancedAdAccountAudit()
     
-    # Add agency name if user is authenticated
-    if current_user.is_authenticated:
-        results['agency_name'] = current_user.agency_name
+    # Run enhanced audit
+    audit_result = enhanced_audit.run_audit(
+        mock_data,
+        platform='facebook',
+        client_name="Demo Client",
+        agency_name="Your Agency" if not current_user.is_authenticated else current_user.agency_name
+    )
     
-    return jsonify(results)
+    # Return the analysis results
+    return jsonify(audit_result.get('analysis_results', {}))
 
 @api_bp.route('/generate-report', methods=['POST'])
 @login_required
@@ -312,33 +337,47 @@ def generate_report():
         # Use current user's agency name
         agency_name = current_user.agency_name
         
-        # For demonstration, we'll use test audit data
-        # In a real app, you would fetch stored audit results by ID
-        credentials = {'test': 'test'}
-        connector = AdPlatformConnector(credentials)
-        connector.connect_facebook()
+        # Check if we have cached results
+        enhanced_audit = EnhancedAdAccountAudit()
         
-        # Get mock data
-        mock_data = connector.fetch_account_data('facebook', '12345', days_lookback=30)
+        # Try to use cached results first
+        cached_analysis = enhanced_audit.load_cached_analysis(client_name)
         
-        # Run analysis
-        analyzer = AdAccountAnalyzer(mock_data)
-        audit_results = analyzer.run_full_analysis()
-        
-        # Generate report
-        from reporting.generator import ReportGenerator
-        generator = ReportGenerator(audit_results, client_name, agency_name)
-        
-        pdf_path = generator.generate_pdf_report()
+        if cached_analysis:
+            # Generate report from cached analysis
+            report_path = enhanced_audit.report_generator.generate_report(
+                cached_analysis,
+                client_name,
+                agency_name
+            )
+        else:
+            # For demonstration, we'll use test audit data
+            credentials = {'test': 'test'}
+            connector = AdPlatformConnector(credentials)
+            connector.connect_facebook()
+            
+            # Get mock data
+            mock_data = connector.fetch_account_data('facebook', '12345', days_lookback=30)
+            
+            # Run analysis
+            audit_result = enhanced_audit.run_audit(
+                mock_data,
+                platform='facebook',
+                client_name=client_name,
+                agency_name=agency_name,
+                generate_report=True
+            )
+            
+            report_path = audit_result.get('report_path')
         
         # Get the filename from the path
-        filename = os.path.basename(pdf_path)
+        filename = os.path.basename(report_path) if report_path else None
         
         # Return the report details
         return jsonify({
             'success': True,
-            'report_path': pdf_path,
-            'download_url': f'/api/reports/{filename}',
+            'report_path': report_path,
+            'download_url': f'/api/reports/{filename}' if filename else None,
             'message': 'Report generated successfully',
             'client_name': client_name
         })

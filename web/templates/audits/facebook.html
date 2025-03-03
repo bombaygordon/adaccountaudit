@@ -127,6 +127,7 @@
                 // Prepare request data
                 const requestData = {
                     credentials: fbCredentials,
+                    access_token: fbCredentials.fb_access_token,
                     account_id: accountId,
                     days_lookback: parseInt(daysLookback),
                     client_id: clientId || null
@@ -143,32 +144,53 @@
                 
                 const result = await response.json();
                 
-                if (result.success) {
-                    // Store audit results in session storage
-                    sessionStorage.setItem('latest_audit', JSON.stringify(result.results));
-                    
-                    // Show success message
-                    auditStatusTitle.textContent = 'Audit Complete';
-                    auditStatusMessage.innerHTML = `
-                        <div class="alert alert-success">
-                            <h5 class="alert-heading">Audit completed successfully!</h5>
-                            <p>Your Facebook Ads account has been analyzed and insights are ready.</p>
-                            <hr>
-                            <p class="mb-0">Click "View Results" to see the audit findings.</p>
-                        </div>
-                    `;
-                    viewResultsBtn.style.display = 'block';
-                } else {
-                    // Show error message
-                    auditStatusTitle.textContent = 'Audit Failed';
-                    auditStatusMessage.innerHTML = `
-                        <div class="alert alert-danger">
-                            <h5 class="alert-heading">Audit failed</h5>
-                            <p>${result.error || 'An error occurred while running the audit.'}</p>
-                        </div>
-                    `;
-                    viewResultsBtn.style.display = 'none';
+                // Process the audit response
+                function processAuditResponse(result) {
+                    if (result.success) {
+                        // Extract the correct structure
+                        const data = extractAnalysisData(result);
+                        
+                        // Store audit results
+                        sessionStorage.setItem('latest_audit', JSON.stringify(result));
+                        
+                        // Show success message
+                        auditStatusTitle.textContent = 'Audit Complete';
+                        auditStatusMessage.innerHTML = `
+                            <div class="alert alert-success">
+                                <h5 class="alert-heading">Audit completed successfully!</h5>
+                                <p>Your Facebook Ads account has been analyzed and insights are ready.</p>
+                                <hr>
+                                <p class="mb-0">Click "View Results" to see the audit findings.</p>
+                            </div>
+                        `;
+                        viewResultsBtn.style.display = 'block';
+                    } else {
+                        // Show error message
+                        auditStatusTitle.textContent = 'Audit Failed';
+                        auditStatusMessage.innerHTML = `
+                            <div class="alert alert-danger">
+                                <h5 class="alert-heading">Audit failed</h5>
+                                <p>${result.error || 'An error occurred while running the audit.'}</p>
+                            </div>
+                        `;
+                        viewResultsBtn.style.display = 'none';
+                    }
                 }
+                
+                // Check if data has the enhanced structure and extract the correct data
+                function extractAnalysisData(data) {
+                    // Check if this is the enhanced structure
+                    if (data.analysis_results) {
+                        return data.analysis_results;
+                    } else if (data.results && data.results.analysis_results) {
+                        return data.results.analysis_results;
+                    } else {
+                        // Fall back to the original structure
+                        return data.results || data;
+                    }
+                }
+                
+                processAuditResponse(result);
                 
             } catch (error) {
                 console.error('Error running audit:', error);

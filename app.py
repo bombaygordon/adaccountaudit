@@ -2,6 +2,7 @@ from flask import Flask
 from config import Config
 from auth.models import db
 from auth import login_manager
+from enhanced_audit import EnhancedAdAccountAudit  # Add this import
 
 def create_app(config_class=Config):
     app = Flask(__name__, static_folder='static')

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Account Audit Report - {{ client_name }}</title>
+    <style>
+        :root {
+            --primary-color: #ff6b35;
+            --secondary-color: #2ec4b6;
+            --tertiary-color: #6772e5;
+            --success-color: #3ecf8e;
+            --warning-color: #f9a03f;
+            --danger-color: #e73142;
+            --neutral-color: #4f566b;
+            --light-color: #f5f5f5;
+            --dark-color: #333333;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary-color);
+        }
+        
+        .header h1 {
+            color: var(--primary-color);
+            margin-bottom: 5px;
+            font-size: 32px;
+        }
+        
+        .header p {
+            color: var(--neutral-color);
+            margin-top: 0;
+            font-size: 16px;
+        }
+        
+        .report-info {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: var(--neutral-color);
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 25px;
+        }
+        
+        .section h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        .summary {
+            background-color: var(--light-color);
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+        }
+        
+        .metrics-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            width: calc(25% - 20px);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .metric-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .metric-card .label {
+            font-size: 14px;
+            color: var(--neutral-color);
+        }
+        
+        .improvement-metrics {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .improvement-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 25px;
+            width: calc(50% - 40px);
+            text-align: center;
+        }
+        
+        .improvement-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .improvement-card.savings .improvement-value {
+            color: var(--success-color);
+        }
+        
+        .improvement-card.performance .improvement-value {
+            color: var(--tertiary-color);
+        }
+        
+        .improvement-label {
+            font-size: 16px;
+            color: var(--neutral-color);
+        }
+        
+        .chart-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .chart-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+        
+        .recommendation-category {
+            margin-bottom: 30px;
+        }
+        
+        .recommendation-category h3 {
+            color: var(--neutral-color);
+            font-size: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .recommendation-category h3 i {
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+        
+        .recommendation {
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+        
+        .recommendation.high-priority {
+            border-left: 5px solid var(--danger-color);
+        }
+        
+        .recommendation.medium-priority {
+            border-left: 5px solid var(--warning-color);
+        }
+        
+        .recommendation.low-priority {
+            border-left: 5px solid var(--success-color);
+        }
+        
+        .recommendation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .recommendation-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: var(--dark-color);
+        }
+        
+        .recommendation-priority {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+        
+        .priority-high {
+            background-color: var(--danger-color);
+        }
+        
+        .priority-medium {
+            background-color: var(--warning-color);
+        }
+        
+        .priority-low {
+            background-color: var(--success-color);
+        }
+        
+        .recommendation-text {
+            font-size: 14px;
+            color: var(--neutral-color);
+            margin: 0;
+        }
+        
+        .recommendation-savings {
+            font-size: 14px;
+            color: var(--success-color);
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: var(--neutral-color);
+            font-size: 14px;
+        }
+        
+        .two-column {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .column {
+            width: 48%;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        table th, table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        table th {
+            background-color: var(--light-color);
+            color: var(--neutral-color);
+            font-weight: bold;
+        }
+        
+        table tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        
+        /* Responsive Design */
+        @media screen and (max-width: 768px) {
+            .metric-card {
+                width: calc(50% - 20px);
+            }
+            
+            .improvement-metrics {
+                flex-direction: column;
+            }
+            
+            .improvement-card {
+                width: 100%;
+                margin-bottom: 20px;
+            }
+            
+            .two-column {
+                flex-direction: column;
+            }
+            
+            .column {
+                width: 100%;
+                margin-bottom: 20px;
+            }
+        }
+        
+        @media screen and (max-width: 480px) {
+            .metric-card {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Ad Account Audit Report</h1>
+            <p>Prepared for {{ client_name }} by {{ agency_name }}</p>
+            <div class="report-info">
+                <span>Analysis Period: {{ analysis_period.start_date }} to {{ analysis_period.end_date }} ({{ analysis_period.days }} days)</span> | 
+                <span>Report Date: {{ report_date }}</span> | 
+                <span>Platform: {{ platform }}</span>
+            </div>
+        </div>
+        
+        <div class="summary">
+            <h2>Executive Summary</h2>
+            <p>This report provides a comprehensive analysis of your ad account performance, identifying optimization opportunities and actionable recommendations to improve results.</p>
+            
+            <div class="improvement-metrics">
+                <div class="improvement-card savings">
+                    <div class="improvement-value">{{ potential_savings }}</div>
+                    <div class="improvement-label">Potential Monthly Savings</div>
+                </div>
+                <div class="improvement-card performance">
+                    <div class="improvement-value">{{ improvement_percentage }}</div>
+                    <div class="improvement-label">Potential Performance Improvement</div>
+                </div>
+            </div>
+            
+            {% if charts.improvement_gauge %}
+            <div class="chart-container">
+                <img src="data:image/png;base64,{{ charts.improvement_gauge }}" alt="Improvement Potential Gauge" class="chart-image">
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="section">
+            <h2>Account Performance Overview</h2>
+            
+            <div class="metrics-container">
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.total_spend }}</div>
+                    <div class="label">Total Spend</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.total_impressions }}</div>
+                    <div class="label">Impressions</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.total_clicks }}</div>
+                    <div class="label">Clicks</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.total_conversions }}</div>
+                    <div class="label">Conversions</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.ctr }}</div>
+                    <div class="label">CTR</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.cpc }}</div>
+                    <div class="label">CPC</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.conversion_rate }}</div>
+                    <div class="label">Conversion Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">{{ formatted_metrics.cpa }}</div>
+                    <div class="label">CPA</div>
+                </div>
+            </div>
+            
+            {% if charts.performance_comparison %}
+            <div class="chart-container">
+                <h3>Performance vs. Industry Benchmarks</h3>
+                <img src="data:image/png;base64,{{ charts.performance_comparison }}" alt="Performance Comparison" class="chart-image">
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="section">
+            <h2>Key Findings & Recommendations</h2>
+            
+            <div class="two-column">
+                <div class="column">
+                    {% if charts.savings_distribution %}
+                    <div class="chart-container">
+                        <h3>Potential Savings by Category</h3>
+                        <img src="data:image/png;base64,{{ charts.savings_distribution }}" alt="Savings Distribution" class="chart-image">
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="column">
+                    {% if charts.recommendations_by_category %}
+                    <div class="chart-container">
+                        <h3>Recommendations by Category</h3>
+                        <img src="data:image/png;base64,{{ charts.recommendations_by_category }}" alt="Recommendations by Category" class="chart-image">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="recommendations-container">
+                <h3>Priority Recommendations</h3>
+                
+                {% for category, data in categorized_recommendations.items() %}
+                <div class="recommendation-category">
+                    <h3>
+                        <i class="icon-{{ data.icon }}"></i>
+                        {{ data.title }} ({{ data.items|length }} recommendations)
+                    </h3>
+                    
+                    {% for rec in data.items[:3] %}
+                    <div class="recommendation {% if rec.severity == 'high' %}high-priority{% elif rec.severity == 'medium' %}medium-priority{% else %}low-priority{% endif %}">
+                        <div class="recommendation-header">
+                            <div class="recommendation-title">
+                                {% if 'campaign_name' in rec %}
+                                Campaign: {{ rec.campaign_name }}
+                                {% elif 'adset_name' in rec %}
+                                Ad Set: {{ rec.adset_name }}
+                                {% elif 'ad_name' in rec %}
+                                Ad: {{ rec.ad_name }}
+                                {% elif 'segment_type' in rec %}
+                                Segment: {{ rec.segment_type }}
+                                {% else %}
+                                Optimization Opportunity
+                                {% endif %}
+                            </div>
+                            <div class="recommendation-priority priority-{{ rec.severity }}">
+                                {{ rec.severity|capitalize }} Priority
+                            </div>
+                        </div>
+                        <p class="recommendation-text">{{ rec.recommendation }}</p>
+                        {% if rec.potential_savings > 0 %}
+                        <p class="recommendation-savings">Potential Savings: ${{ "%.2f"|format(rec.potential_savings) }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    
+                    {% if data.items|length > 3 %}
+                    <p><em>+ {{ data.items|length - 3 }} more recommendations in this category</em></p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        {% if 'audience_insights' in charts %}
+        <div class="section">
+            <h2>Audience Insights</h2>
+            
+            <div class="chart-container">
+                <img src="data:image/png;base64,{{ charts.audience_insights }}" alt="Audience Insights" class="chart-image">
+            </div>
+            
+            <p>The chart above shows performance variations across different audience segments, highlighting opportunities for targeting optimization.</p>
+        </div>
+        {% endif %}
+        
+        {% if 'budget_allocation' in charts %}
+        <div class="section">
+            <h2>Budget Allocation Analysis</h2>
+            
+            <div class="chart-container">
+                <img src="data:image/png;base64,{{ charts.budget_allocation }}" alt="Budget Allocation" class="chart-image">
+            </div>
+            
+            <p>This chart illustrates how your budget is currently distributed across campaigns with different performance levels. Optimizing this allocation can significantly improve overall account performance.</p>
+        </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p>This report was generated automatically by the AI Ad Account Auditor.</p>
+            <p>&copy; {{ agency_name }} - {{ report_date }}</p>
+        </div>
+    </div>
+</body>
+</html>
