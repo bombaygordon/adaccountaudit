@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">{{ client.name }}</h1>
+        <div>
+            <a href="{{ url_for('web.facebook_audit', client_id=client.id) }}" class="btn btn-primary">
+                <i class="fab fa-facebook me-2"></i>Run Facebook Audit
+            </a>
+            <a href="{{ url_for('web.edit_client', client_id=client.id) }}" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-edit me-2"></i>Edit
+            </a>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Client Information</h5>
+                </div>
+                <div class="card-body">
+                    {% if client.email %}
+                        <p><strong>Email:</strong> {{ client.email }}</p>
+                    {% endif %}
+                    {% if client.website %}
+                        <p><strong>Website:</strong> <a href="{{ client.website }}" target="_blank">{{ client.website }}</a></p>
+                    {% endif %}
+                    <p><strong>Added:</strong> {{ client.created_at.strftime('%B %d, %Y') }}</p>
+                    {% if client.notes %}
+                        <p><strong>Notes:</strong></p>
+                        <p>{{ client.notes }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Ad Platforms</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('web.facebook_audit', client_id=client.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fab fa-facebook text-primary me-2"></i> Facebook Ads
+                            </div>
+                            <span class="badge bg-primary rounded-pill">Audit</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center disabled">
+                            <div>
+                                <i class="fab fa-instagram text-danger me-2"></i> Instagram Ads
+                            </div>
+                            <span class="badge bg-secondary rounded-pill">Via Facebook</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center disabled">
+                            <div>
+                                <i class="fab fa-tiktok me-2"></i> TikTok Ads
+                            </div>
+                            <span class="badge bg-secondary rounded-pill">Coming Soon</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Audit History</h5>
+                </div>
+                <div class="card-body">
+                    {% if audits %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Platform</th>
+                                        <th>Potential Savings</th>
+                                        <th>Improvement</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for audit in audits %}
+                                        <tr>
+                                            <td>{{ audit.timestamp.strftime('%Y-%m-%d') }}</td>
+                                            <td>
+                                                {% if audit.platform == 'facebook' %}
+                                                    <i class="fab fa-facebook text-primary me-1"></i> Facebook
+                                                {% elif audit.platform == 'tiktok' %}
+                                                    <i class="fab fa-tiktok me-1"></i> TikTok
+                                                {% else %}
+                                                    {{ audit.platform }}
+                                                {% endif %}
+                                            </td>
+                                            <td>${{ "%.2f"|format(audit.potential_savings) }}</td>
+                                            <td>{{ "%.1f"|format(audit.potential_improvement) }}%</td>
+                                            <td>
+                                                <a href="#" class="btn btn-sm btn-outline-primary">View</a>
+                                                <a href="#" class="btn btn-sm btn-outline-secondary">Report</a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <p class="mb-0">No audits have been performed for this client yet. Start by running a <a href="{{ url_for('web.facebook_audit', client_id=client.id) }}" class="alert-link">Facebook Ads audit</a>.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Recommendations</h5>
+                </div>
+                <div class="card-body">
+                    {% if recommendations %}
+                        <div class="list-group">
+                            {% for rec in recommendations %}
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">
+                                            {% if 'budget' in rec.type %}
+                                                <i class="fas fa-money-bill text-success me-2"></i>
+                                            {% elif 'targeting' in rec.type %}
+                                                <i class="fas fa-users text-primary me-2"></i>
+                                            {% elif 'creative' in rec.type or 'fatigue' in rec.type %}
+                                                <i class="fas fa-paint-brush text-warning me-2"></i>
+                                            {% else %}
+                                                <i class="fas fa-lightbulb text-info me-2"></i>
+                                            {% endif %}
+                                            {{ rec.type|replace('_', ' ')|title }}
+                                        </h6>
+                                        <small>{{ rec.timestamp.strftime('%Y-%m-%d') }}</small>
+                                    </div>
+                                    <p class="mb-1">{{ rec.recommendation }}</p>
+                                    <small>
+                                        {% if rec.platform == 'facebook' %}
+                                            <i class="fab fa-facebook text-primary me-1"></i> Facebook
+                                        {% elif rec.platform == 'tiktok' %}
+                                            <i class="fab fa-tiktok me-1"></i> TikTok
+                                        {% else %}
+                                            {{ rec.platform }}
+                                        {% endif %}
+                                        | Severity: 
+                                        {% if rec.severity == 'high' %}
+                                            <span class="text-danger">High</span>
+                                        {% elif rec.severity == 'medium' %}
+                                            <span class="text-warning">Medium</span>
+                                        {% else %}
+                                            <span class="text-info">Low</span>
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <p class="mb-0">No recommendations yet. Run an audit to get optimization suggestions.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

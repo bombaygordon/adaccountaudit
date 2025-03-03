@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Connect Facebook Ads Account</h5>
+                </div>
+                <div class="card-body text-center">
+                    <p class="mb-4">Connect your Facebook Ads account to analyze performance and get optimization recommendations.</p>
+                    
+                    <!-- Facebook Login Button -->
+                    <div class="fb-login-button" 
+                        data-width="" 
+                        data-size="large" 
+                        data-button-type="continue_with" 
+                        data-layout="default" 
+                        data-auto-logout-link="false" 
+                        data-use-continue-as="true"
+                        data-scope="ads_management,ads_read,business_management"
+                        onlogin="checkLoginState();"></div>
+                        
+                    <!-- Account Selector (Hidden initially) -->
+                    <div id="adAccountSelector" class="mt-4" style="display: none;">
+                        <h5>Select Ad Account to Audit</h5>
+                        <div class="form-group">
+                            <select id="adAccountSelect" class="form-select form-select-lg mb-3">
+                                <option value="">Select an Ad Account</option>
+                            </select>
+                        </div>
+                        <button id="connectSelectedAccount" class="btn btn-primary">Connect Account</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resultTitle">Connection Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="resultMessage">
+                <!-- Result will be shown here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="{{ url_for('web.index') }}" class="btn btn-primary" id="goDashboardBtn" style="display: none;">Go to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Facebook SDK -->
+<div id="fb-root"></div>
+<script async defer crossorigin="anonymous" 
+    src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0&appId=YOUR_APP_ID">
+</script>
+
+<script>
+    // Initialize Facebook SDK
+    window.fbAsyncInit = function() {
+        FB.init({
+            appId: 'YOUR_APP_ID', // Replace with your App ID
+            cookie: true,
+            xfbml: true,
+            version: 'v18.0'
+        });
+    };
+    
+    // Check login state
+    function checkLoginState() {
+        FB.getLoginStatus(function(response) {
+            if (response.status === 'connected') {
+                // User is logged in and has authorized your app
+                const accessToken = response.authResponse.accessToken;
+                const userID = response.authResponse.userID;
+                
+                // Store access token
+                sessionStorage.setItem('fb_access_token', accessToken);
+                
+                // Get list of ad accounts they have access to
+                FB.api('/me/adaccounts', function(adAccountResponse) {
+                    if (adAccountResponse && !adAccountResponse.error) {
+                        displayAdAccounts(adAccountResponse.data);
+                    } else {
+                        showError("Couldn't retrieve ad accounts. Please make sure you have access to Facebook Ads accounts.");
+                    }
+                });
+            } else {
+                console.log('User is not logged in or has not authorized the app');
+            }
+        });
+    }
+    
+    function displayAdAccounts(accounts) {
+        // Show the accounts in a dropdown for user to select
+        const select = document.getElementById('adAccountSelect');
+        select.innerHTML = '<option value="">Select an Ad Account</option>';
+        
+        accounts.forEach(account => {
+            const option = document.createElement('option');
+            option.value = account.id.replace('act_', ''); // Remove 'act_' prefix
+            option.textContent = account.name ? `${account.name} (${account.id})` : account.id;
+            select.appendChild(option);
+        });
+        
+        document.getElementById('adAccountSelector').style.display = 'block';
+    }
+    
+    // Handle connecting the selected account
+    document.getElementById('connectSelectedAccount').addEventListener('click', async function() {
+        const accountId = document.getElementById('adAccountSelect').value;
+        
+        if (!accountId) {
+            alert('Please select an Ad Account');
+            return;
+        }
+        
+        const accessToken = sessionStorage.getItem('fb_access_token');
+        
+        if (!accessToken) {
+            alert('Facebook login error. Please try again.');
+            return;
+        }
+        
+        try {
+            // Show loading state
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Connecting...';
+            
+            // Save the connection to your backend
+            const response = await fetch('/api/connect/facebook-oauth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    access_token: accessToken,
+                    account_id: accountId
+                })
+            });
+            
+            const result = await response.json();
+            
+            // Reset button
+            this.disabled = false;
+            this.innerHTML = 'Connect Account';
+            
+            // Show result
+            const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+            const resultTitle = document.getElementById('resultTitle');
+            const resultMessage = document.getElementById('resultMessage');
+            const goDashboardBtn = document.getElementById('goDashboardBtn');
+            
+            if (result.success) {
+                resultTitle.textContent = 'Connection Successful';
+                resultMessage.innerHTML = '<div class="alert alert-success">Your Facebook Ads account has been connected successfully!</div>';
+                goDashboardBtn.style.display = 'block';
+                
+                // Store selected account in session storage for later use
+                sessionStorage.setItem('fb_account_id', accountId);
+            } else {
+                resultTitle.textContent = 'Connection Failed';
+                resultMessage.innerHTML = `<div class="alert alert-danger">Failed to connect: ${result.error || 'Unknown error'}</div>`;
+                goDashboardBtn.style.display = 'none';
+            }
+            
+            resultModal.show();
+        } catch (error) {
+            console.error('Error connecting account:', error);
+            this.disabled = false;
+            this.innerHTML = 'Connect Account';
+            alert('Error connecting account. Please try again.');
+        }
+    });
+    
+    function showError(message) {
+        alert(message);
+    }
+</script>
+{% endblock %}

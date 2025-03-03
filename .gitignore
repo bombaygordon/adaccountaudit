@@ -1,0 +1,25 @@
+@"
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.log
+
+# Reports and generated files
+reports/
+*.pdf
+
+# Database
+*.db
+*.sqlite
+
+# IDE specific files
+.vscode/
+.idea/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+"@ | Out-File -FilePath .gitignore -Encoding utf8
