@@ -420,7 +420,7 @@
                 <div class="recommendation-category">
                     <h3>
                         <i class="icon-{{ data.icon }}"></i>
-                        {{ data.title }} ({{ data.items|length }} recommendations)
+                        {{ data.title }} ({{ data.items|count if data.items is iterable else 0 }} recommendations)
                     </h3>
                     
                     {% for rec in data.items[:3] %}

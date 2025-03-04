@@ -12,15 +12,9 @@
                     <p class="mb-4">Connect your Facebook Ads account to analyze performance and get optimization recommendations.</p>
                     
                     <!-- Facebook Login Button -->
-                    <div class="fb-login-button" 
-                        data-width="" 
-                        data-size="large" 
-                        data-button-type="continue_with" 
-                        data-layout="default" 
-                        data-auto-logout-link="false" 
-                        data-use-continue-as="true"
-                        data-scope="ads_management,ads_read,business_management"
-                        onlogin="checkLoginState();"></div>
+                    <button id="fbLoginBtn" class="btn btn-lg btn-primary">
+                        <i class="fab fa-facebook me-2"></i> Connect with Facebook
+                    </button>
                         
                     <!-- Account Selector (Hidden initially) -->
                     <div id="adAccountSelector" class="mt-4" style="display: none;">
@@ -62,19 +56,30 @@
 <!-- Facebook SDK -->
 <div id="fb-root"></div>
 <script async defer crossorigin="anonymous" 
-    src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0&appId=YOUR_APP_ID">
+    src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0&appId=590322997322420">
 </script>
 
 <script>
     // Initialize Facebook SDK
     window.fbAsyncInit = function() {
         FB.init({
-            appId: 'YOUR_APP_ID', // Replace with your App ID
+            appId: '590322997322420',
             cookie: true,
             xfbml: true,
             version: 'v18.0'
         });
     };
+    
+    // Custom login button
+    document.getElementById('fbLoginBtn').addEventListener('click', function() {
+        FB.login(function(response) {
+            // Handle the response
+            checkLoginState();
+        }, {
+            scope: 'ads_management,ads_read,business_management,pages_read_engagement,pages_show_list',
+            return_scopes: true
+        });
+    });
     
     // Check login state
     function checkLoginState() {
@@ -87,13 +92,50 @@
                 // Store access token
                 sessionStorage.setItem('fb_access_token', accessToken);
                 
-                // Get list of ad accounts they have access to
-                FB.api('/me/adaccounts', function(adAccountResponse) {
+                // First, get personal ad accounts
+                FB.api('/me/adaccounts', {fields: 'id,name,account_status'}, function(adAccountResponse) {
+                    let allAccounts = [];
+                    
                     if (adAccountResponse && !adAccountResponse.error) {
-                        displayAdAccounts(adAccountResponse.data);
-                    } else {
-                        showError("Couldn't retrieve ad accounts. Please make sure you have access to Facebook Ads accounts.");
+                        allAccounts = [...adAccountResponse.data];
                     }
+                    
+                    // Then get business ad accounts
+                    FB.api('/me/businesses', function(businessResponse) {
+                        if (businessResponse && !businessResponse.error && businessResponse.data.length > 0) {
+                            // For each business, get its ad accounts
+                            let businessesProcessed = 0;
+                            const totalBusinesses = businessResponse.data.length;
+                            
+                            businessResponse.data.forEach(business => {
+                                FB.api(
+                                    `/${business.id}/client_ad_accounts`, 
+                                    {fields: 'id,name,account_status'},
+                                    function(businessAdAccountsResponse) {
+                                        businessesProcessed++;
+                                        
+                                        if (businessAdAccountsResponse && !businessAdAccountsResponse.error) {
+                                            // Add business name prefix to these accounts for clarity
+                                            const businessAccounts = businessAdAccountsResponse.data.map(account => {
+                                                account.name = `${business.name} - ${account.name || account.id}`;
+                                                return account;
+                                            });
+                                            
+                                            allAccounts = [...allAccounts, ...businessAccounts];
+                                        }
+                                        
+                                        // When all businesses are processed, display accounts
+                                        if (businessesProcessed === totalBusinesses) {
+                                            displayAdAccounts(allAccounts);
+                                        }
+                                    }
+                                );
+                            });
+                        } else {
+                            // No businesses found, just display personal accounts
+                            displayAdAccounts(allAccounts);
+                        }
+                    });
                 });
             } else {
                 console.log('User is not logged in or has not authorized the app');
@@ -106,10 +148,22 @@
         const select = document.getElementById('adAccountSelect');
         select.innerHTML = '<option value="">Select an Ad Account</option>';
         
+        // Sort accounts, maybe putting personal accounts first
+        accounts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        
         accounts.forEach(account => {
             const option = document.createElement('option');
             option.value = account.id.replace('act_', ''); // Remove 'act_' prefix
-            option.textContent = account.name ? `${account.name} (${account.id})` : account.id;
+            
+            // Format display name
+            const displayName = account.name || account.id;
+            option.textContent = displayName;
+            
+            // Optionally add a data attribute to track which accounts are from business manager
+            if (displayName.includes(' - ')) {
+                option.setAttribute('data-is-business', 'true');
+            }
+            
             select.appendChild(option);
         });
         
@@ -166,8 +220,12 @@
                 resultMessage.innerHTML = '<div class="alert alert-success">Your Facebook Ads account has been connected successfully!</div>';
                 goDashboardBtn.style.display = 'block';
                 
-                // Store selected account in session storage for later use
-                sessionStorage.setItem('fb_account_id', accountId);
+                // Store Facebook credentials for future use
+                const fbCredentials = {
+                    fb_access_token: accessToken,
+                    fb_account_id: accountId
+                };
+                sessionStorage.setItem('fb_credentials', JSON.stringify(fbCredentials));
             } else {
                 resultTitle.textContent = 'Connection Failed';
                 resultMessage.innerHTML = `<div class="alert alert-danger">Failed to connect: ${result.error || 'Unknown error'}</div>`;

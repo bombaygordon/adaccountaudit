@@ -74,7 +74,25 @@ class EnhancedAdAccountAudit:
         self.logger.info(f"Starting enhanced audit for {client_name} on {platform}")
         
         try:
+            # Validate account_data structure before analysis
+            if not isinstance(account_data, dict):
+                raise ValueError(f"Invalid account data format: expected dict, got {type(account_data)}")
+                
+            # Check that required keys are present
+            for key in ['campaigns', 'insights']:
+                if key not in account_data:
+                    self.logger.warning(f"Missing key '{key}' in account data")
+                    
+            # Verify insights is a list and has items
+            if 'insights' in account_data:
+                if not isinstance(account_data['insights'], list):
+                    self.logger.error(f"Invalid insights format: expected list, got {type(account_data['insights'])}")
+                    raise ValueError(f"Invalid insights data format in account_data")
+                elif len(account_data['insights']) == 0:
+                    self.logger.warning(f"Empty insights list in account data")
+            
             # Run enhanced analysis
+            self.logger.info(f"Running analysis on {platform} data")
             analysis_results = self.analyzer.analyze(account_data, platform)
             
             # Cache results if enabled
@@ -117,6 +135,9 @@ class EnhancedAdAccountAudit:
                 'success': False,
                 'error': str(e)
             }
+    
+    # Alias for backwards compatibility
+    analyze = run_audit
     
     def _cache_analysis_results(self, analysis_results, client_name, platform):
         """

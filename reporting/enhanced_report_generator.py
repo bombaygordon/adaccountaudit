@@ -1,6 +1,9 @@
 import os
 import pdfkit
 import jinja2
+import matplotlib
+matplotlib.use('Agg')  # Use the Agg backend which is non-interactive
+import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import io
 import base64
