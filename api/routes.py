@@ -224,141 +224,72 @@ def audit():
     
     return jsonify(audit_result)
 
+# Find this function in api/routes.py
 @api_bp.route('/audit/facebook', methods=['POST'])
 @login_required
 def audit_facebook():
     """Run an audit on Facebook ad account data using OAuth token"""
     try:
         data = request.json or {}
-        from datetime import datetime
         
-        # Return predetermined mock data instead of running the real analysis
-        mock_result = {
-            'success': True,
-            'results': {
-                'platform': 'facebook',
-                'client_name': 'Facebook Ads Account',
-                'timestamp': datetime.now().isoformat(),
-                'potential_savings': 450.0,
-                'potential_improvement_percentage': 15.5,
-                'recommendations': [
-                    {
-                        "type": "budget_efficiency",
-                        "severity": "high",
-                        "recommendation": "Consider reducing budget for campaign 'Summer Sale' as its CPA ($48.00) is significantly higher than average ($32.00).",
-                        "potential_savings": 250.00
-                    },
-                    {
-                        "type": "audience_targeting",
-                        "severity": "medium",
-                        "recommendation": "Gender 'male' significantly underperforms with a CTR of 2.10% vs 5.00% for 'female'. Consider rebalancing budget allocation.",
-                        "potential_savings": 150.00
-                    },
-                    {
-                        "type": "ad_fatigue",
-                        "severity": "medium",
-                        "recommendation": "Moderate fatigue detected in ad 'Product Demo Video' after 15 days with CTR declining by 25%. Consider refreshing creative.",
-                        "potential_savings": 100.00
-                    }
-                ]
-            }
-        }
+        # Get the access token and account ID from the request
+        access_token = data.get('access_token')
+        account_id = data.get('account_id')
+        days_lookback = data.get('days_lookback', 30)
         
-        return jsonify(mock_result)
-        
-    except Exception as e:
-        logger.error(f"Error running Facebook audit: {e}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@api_bp.route('/generate-report', methods=['POST'])
-@login_required
-def generate_report():
-    """Generate a PDF report from audit results"""
-    try:
-        data = request.json or {}
-        
-        # Get client information
-        client_id = data.get('client_id')
-        
-        if client_id:
-            # Get client from database
-            client = Client.query.get(client_id)
+        if not access_token or not account_id:
+            logger.error("Missing access token or account ID in request")
+            return jsonify({
+                'success': False,
+                'error': 'Missing access token or account ID'
+            }), 400
             
-            # Verify client belongs to current user
-            if not client or client.user_id != current_user.id:
-                return jsonify({
-                    'success': False,
-                    'error': 'Invalid client selection'
-                }), 403
-                
-            client_name = client.name
-        else:
-            # Use default or provided client name
-            client_name = data.get('client_name', 'Client')
+        # Log what we're doing
+        logger.info(f"Running Facebook audit for account ID: {account_id}")
+        logger.info(f"Using token starting with: {access_token[:15]}...")
         
-        # Use current user's agency name
-        agency_name = current_user.agency_name
+        # Initialize the Facebook connector with the provided token
+        connector = AdPlatformConnector({'fb_access_token': access_token})
         
-        # Check if we have cached results
+        # Connect to Facebook
+        fb_connected = connector.connect_facebook()
+        
+        if not fb_connected:
+            logger.error("Failed to connect to Facebook API")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to connect to Facebook with provided token'
+            }), 401
+        
+        # Fetch actual data from the account
+        logger.info("Connection successful, fetching account data...")
+        fb_data = connector.fetch_account_data('facebook', account_id, days_lookback)
+        
+        # Log what we got back
+        logger.info(f"Data fetched. Campaigns: {len(fb_data.get('campaigns', []))}, Insights: {len(fb_data.get('insights', []))}")
+        
+        # Initialize audit module
         enhanced_audit = EnhancedAdAccountAudit()
         
-        # Try to use cached results first
-        cached_analysis = enhanced_audit.load_cached_analysis(client_name)
+        # Run analysis on the real data
+        logger.info("Running audit analysis...")
+        audit_result = enhanced_audit.run_audit(
+            fb_data,
+            platform='facebook',
+            client_name='Facebook Ads Account',
+            agency_name=current_user.agency_name if current_user.agency_name else 'Your Agency'
+        )
         
-        if cached_analysis:
-            # Generate report from cached analysis
-            report_path = enhanced_audit.report_generator.generate_report(
-                cached_analysis,
-                client_name,
-                agency_name
-            )
-        else:
-            # For demonstration, we'll use test audit data
-            credentials = {'test': 'test'}
-            connector = AdPlatformConnector(credentials)
-            connector.connect_facebook()
-            
-            # Get mock data
-            mock_data = connector.fetch_account_data('facebook', '12345', days_lookback=30)
-            
-            # Run analysis
-            try:
-                audit_result = enhanced_audit.run_audit(
-                    mock_data,
-                    platform='facebook',
-                    client_name=client_name,
-                    agency_name=agency_name,
-                    generate_report=True
-                )
-            except AttributeError:
-                # Try alternate method if run_audit is not available
-                audit_result = enhanced_audit.analyze(
-                    mock_data,
-                    platform='facebook',
-                    client_name=client_name,
-                    agency_name=agency_name,
-                    generate_report=True
-                )
-            
-            report_path = audit_result.get('report_path')
+        logger.info("Audit analysis complete, returning results")
         
-        # Get the filename from the path
-        filename = os.path.basename(report_path) if report_path else None
-        
-        # Return the report details
+        # Return the real audit results
         return jsonify({
             'success': True,
-            'report_path': report_path,
-            'download_url': f'/api/reports/{filename}' if filename else None,
-            'message': 'Report generated successfully',
-            'client_name': client_name
+            'results': audit_result
         })
         
     except Exception as e:
-        logger.error(f"Error generating report: {e}")
+        logger.error(f"Error running Facebook audit: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

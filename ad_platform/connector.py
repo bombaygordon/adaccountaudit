@@ -90,10 +90,11 @@ class AdPlatformConnector:
         
         if platform == 'facebook':
             try:
-                logger.info("Attempting to fetch real Facebook data...")
+                logger.info(f"Attempting to fetch real Facebook data for account {account_id}")
+                logger.info(f"Using access token starting with: {self.credentials['fb_access_token'][:15]}...")
                 real_data = self._fetch_facebook_data(account_id, start_date, end_date)
                 
-                # Verify we got real data
+                # Improved verification of real data
                 has_real_data = (
                     real_data and 
                     'campaigns' in real_data and 
@@ -106,10 +107,19 @@ class AdPlatformConnector:
                     logger.info(f"Successfully fetched real Facebook data: {len(real_data['campaigns'])} campaigns, {len(real_data['insights'])} insights")
                     return real_data
                 else:
-                    logger.warning("Real Facebook data fetch returned empty results, falling back to mock data")
+                    logger.warning("Real Facebook data fetch returned empty or incomplete results")
+                    logger.warning(f"Data structure returned: {json.dumps(real_data, default=str)[:500]}...")
+                    
+                    # For debugging purposes, if we have partial data, let's return that instead of mock data
+                    if real_data and ('campaigns' in real_data or 'insights' in real_data):
+                        logger.info("Returning partial real data for debugging")
+                        return real_data
+                    
+                    logger.warning("Falling back to mock data due to empty/missing data")
                     return self._get_mock_facebook_data(account_id, start_date, end_date)
             except Exception as e:
-                logger.error(f"Error fetching Facebook data: {e}")
+                logger.error(f"Error fetching Facebook data: {e}", exc_info=True)
+                logger.warning(f"Error details: {str(e)}")
                 logger.info("Falling back to mock data due to error")
                 return self._get_mock_facebook_data(account_id, start_date, end_date)
         elif platform == 'tiktok':
@@ -123,6 +133,7 @@ class AdPlatformConnector:
             end_date_str = end_date.strftime('%Y-%m-%d')
             
             logger.info(f"Fetching Facebook data from {start_date_str} to {end_date_str}")
+            logger.info(f"Account ID: {account_id}")
             
             # Initialize the Ad Account object
             account = AdAccount(f'act_{account_id}')
@@ -145,6 +156,12 @@ class AdPlatformConnector:
                 'updated_time'
             ])
             
+            # Check if we got campaigns data
+            if not campaigns:
+                logger.warning("No campaigns found for this account")
+            else:
+                logger.info(f"Found {len(campaigns)} campaigns")
+            
             # Fetch ad sets
             logger.info(f"Fetching ad sets for account {account_id}")
             ad_sets = account.get_ad_sets(fields=[
@@ -162,6 +179,11 @@ class AdPlatformConnector:
                 'updated_time'
             ])
             
+            if not ad_sets:
+                logger.warning("No ad sets found for this account")
+            else:
+                logger.info(f"Found {len(ad_sets)} ad sets")
+            
             # Fetch ads
             logger.info(f"Fetching ads for account {account_id}")
             ads = account.get_ads(fields=[
@@ -174,6 +196,11 @@ class AdPlatformConnector:
                 'created_time',
                 'updated_time'
             ])
+            
+            if not ads:
+                logger.warning("No ads found for this account")
+            else:
+                logger.info(f"Found {len(ads)} ads")
             
             # Fetch insights data
             logger.info(f"Fetching insights for account {account_id}")
@@ -214,6 +241,11 @@ class AdPlatformConnector:
                 ]
             )
             
+            if not insights:
+                logger.warning("No insights data found for this account")
+            else:
+                logger.info(f"Found {len(insights)} insights records")
+            
             # Log the counts of fetched objects for debugging
             logger.info(f"Fetched {len(campaigns)} campaigns, {len(ad_sets)} ad sets, {len(ads)} ads, {len(insights)} insights")
             
@@ -223,28 +255,45 @@ class AdPlatformConnector:
             ads_data = [ad.export_all_data() for ad in ads]
             insights_data = [insight.export_all_data() for insight in insights]
             
+            # Log sample data for debugging
+            if campaigns_data:
+                logger.info(f"Sample campaign data: {json.dumps(campaigns_data[0], default=str)[:500]}")
+            if insights_data:
+                logger.info(f"Sample insight data: {json.dumps(insights_data[0], default=str)[:500]}")
+            
             # Process insights data to extract purchase actions
             self._process_facebook_insights(insights_data)
             
             # Return the structured data
-            return {
+            result = {
                 'campaigns': campaigns_data,
                 'ad_sets': ad_sets_data,
                 'ads': ads_data,
                 'insights': insights_data
             }
             
+            logger.info(f"Returning real Facebook data with {len(campaigns_data)} campaigns, {len(insights_data)} insights")
+            return result
+            
         except FacebookRequestError as e:
             error_message = f"Facebook API error while fetching data: {e.api_error_message()}"
             logger.error(error_message)
+            logger.error(f"Error details: Request: {e.request_context}, Code: {e.api_error_code()}")
             raise
             
         except Exception as e:
-            logger.error(f"Error fetching Facebook data: {e}")
+            logger.error(f"Error fetching Facebook data: {e}", exc_info=True)
             raise
     
     def _process_facebook_insights(self, insights_data):
         """Process Facebook insights to extract actions and make data more usable"""
+        if not insights_data:
+            logger.warning("No insights data to process")
+            return
+            
+        logger.info(f"Processing {len(insights_data)} Facebook insights records")
+        
+        processed_count = 0
         for insight in insights_data:
             # Convert date string to a more standard format
             if 'date_start' in insight:
@@ -285,6 +334,10 @@ class AdPlatformConnector:
             for field in ['impressions', 'clicks', 'spend', 'reach']:
                 if field in insight:
                     insight[field] = float(insight[field]) if insight[field] else 0
+            
+            processed_count += 1
+        
+        logger.info(f"Processed {processed_count} insights records")
     
     def _get_mock_facebook_data(self, account_id, start_date, end_date):
         """Generate mock Facebook ad data for development"""
