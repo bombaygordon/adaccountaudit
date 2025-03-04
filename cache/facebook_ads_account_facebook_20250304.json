@@ -1,114 +1,190 @@
 {
-  "timestamp": "2025-03-04T19:27:09.609945",
+  "timestamp": "2025-03-04T22:17:41.501591",
   "platform": "facebook",
   "account_overview": {
-    "total_spend": 1200.0,
-    "total_impressions": 50000,
-    "total_clicks": 2500,
-    "total_conversions": 35,
+    "total_spend": 5318.3,
+    "total_impressions": 479837.0,
+    "total_clicks": 5436.0,
+    "total_conversions": 356.0,
     "total_revenue": 0,
-    "ctr": 5.0,
-    "cpc": 0.48,
-    "cpm": 24.0,
-    "conversion_rate": 1.4000000000000001,
-    "cpa": 34.285714285714285,
+    "ctr": 1.132884708765685,
+    "cpc": 0.9783480500367918,
+    "cpm": 11.083555457374068,
+    "conversion_rate": 6.548933038999265,
+    "cpa": 14.939044943820225,
     "roas": 0,
-    "active_campaigns": 2,
-    "total_campaigns": 2,
-    "active_ad_sets": 1,
-    "total_ad_sets": 1,
-    "active_ads": 1,
-    "total_ads": 1
+    "active_campaigns": 4,
+    "total_campaigns": 79
   },
   "insights": {
-    "audience_targeting": {},
-    "ad_fatigue": [],
-    "creative_performance": {
-      "total_ads_analyzed": 1,
-      "top_performers": [
+    "budget_efficiency": {
+      "campaigns": [
         {
-          "ad_id": "45678901234",
-          "ad_name": "Product Demo Video",
-          "impressions": 50000,
-          "clicks": 2500,
-          "ctr": 5.0,
-          "metric": "ctr"
+          "campaign_id": "120218936805300210",
+          "campaign_name": "CM | Weightloss | Advantage CPR Female Campaign  Campaign",
+          "spend": 58.900000000000006,
+          "impressions": 4646.0,
+          "clicks": 27.0,
+          "conversions": 5.0,
+          "ctr": 0.581145071028842,
+          "cpm": 12.677572105036592,
+          "cpc": 2.1814814814814816,
+          "ctr_index": 57.050155216725905,
+          "cpm_index": 91.00568537969899,
+          "cpc_index": 62.2025791156292,
+          "conversion_rate": 18.51851851851852,
+          "cpa": 11.780000000000001,
+          "conversion_rate_index": 200.95837327929846,
+          "cpa_index": 134.59591966864042,
+          "efficiency_score": 100
         },
         {
-          "ad_id": "45678901234",
-          "ad_name": "Product Demo Video",
-          "clicks": 2500,
-          "conversions": 35,
-          "conversion_rate": 1.4000000000000001,
-          "metric": "conversion_rate"
-        }
-      ],
-      "bottom_performers": [
-        {
-          "ad_id": "45678901234",
-          "ad_name": "Product Demo Video",
-          "impressions": 50000,
-          "clicks": 2500,
-          "ctr": 5.0,
-          "metric": "ctr"
+          "campaign_id": "120218160723340210",
+          "campaign_name": "CM | Weightloss | Advantage CPR Male Campaign",
+          "spend": 78.78,
+          "impressions": 6657.0,
+          "clicks": 51.0,
+          "conversions": 4.0,
+          "ctr": 0.7661108607480848,
+          "cpm": 11.834159531320415,
+          "cpc": 1.5447058823529412,
+          "ctr_index": 75.20797421807363,
+          "cpm_index": 97.491599239974,
+          "cpc_index": 87.84440843485307,
+          "conversion_rate": 7.8431372549019605,
+          "cpa": 19.695,
+          "conversion_rate_index": 85.11178162417346,
+          "cpa_index": 80.50469325699845,
+          "efficiency_score": 90.00205487011017
         },
         {
-          "ad_id": "45678901234",
-          "ad_name": "Product Demo Video",
-          "clicks": 2500,
-          "conversions": 35,
-          "conversion_rate": 1.4000000000000001,
-          "metric": "conversion_rate"
-        }
-      ],
-      "recommendations": [
+          "campaign_id": "120217435730260210",
+          "campaign_name": "CM | TOF | Advantage | UGC Smoothie Campaign",
+          "spend": 907.14,
+          "impressions": 75415.0,
+          "clicks": 1095.0,
+          "conversions": 47.0,
+          "ctr": 1.451965789299211,
+          "cpm": 12.0286415169396,
+          "cpc": 0.8284383561643835,
+          "ctr_index": 142.53734184176682,
+          "cpm_index": 95.91533148150113,
+          "cpc_index": 163.79465464320765,
+          "conversion_rate": 4.292237442922374,
+          "cpa": 19.300851063829786,
+          "conversion_rate_index": 46.5782969299415,
+          "cpa_index": 82.14870569453389,
+          "efficiency_score": 98.12287950344204
+        },
         {
-          "type": "top_creative_scaling",
-          "ad_id": "45678901234",
-          "ad_name": "Product Demo Video",
-          "conversion_rate": 1.4000000000000001,
-          "ctr": 5.0,
-          "severity": "low",
-          "potential_savings": 0,
-          "recommendation": "Scale budget for top-performing ad 'Product Demo Video' with exceptional conversion rate of 1.40% and CTR of 5.00%. Consider creating similar ads based on this winning creative.",
-          "priority_score": 20.0
+          "campaign_id": "120216553457020210",
+          "campaign_name": "CM | TOF | Advantage | Testimonial Campaign",
+          "spend": 1477.8700000000001,
+          "impressions": 134427.0,
+          "clicks": 804.0,
+          "conversions": 107.0,
+          "ctr": 0.598094132875092,
+          "cpm": 10.99384796209095,
+          "cpc": 1.8381467661691544,
+          "ctr_index": 58.71401964113648,
+          "cpm_index": 104.94334125300901,
+          "cpc_index": 73.82096845505355,
+          "conversion_rate": 13.308457711442786,
+          "cpa": 13.811869158878507,
+          "conversion_rate_index": 144.42008467758538,
+          "cpa_index": 114.79546435446588,
+          "efficiency_score": 100
+        },
+        {
+          "campaign_id": "120216553431700210",
+          "campaign_name": "CM | TOF | Advantage | Static  Campaign",
+          "spend": 1350.89,
+          "impressions": 135150.0,
+          "clicks": 1226.0,
+          "conversions": 73.0,
+          "ctr": 0.9071402145763966,
+          "cpm": 9.995486496485388,
+          "cpc": 1.101867862969005,
+          "ctr_index": 89.05261805506909,
+          "cpm_index": 115.42521104651418,
+          "cpc_index": 123.14886294578213,
+          "conversion_rate": 5.954323001631321,
+          "cpa": 18.505342465753426,
+          "conversion_rate_index": 64.61483747691635,
+          "cpa_index": 85.6801184107149,
+          "efficiency_score": 94.64760776449023
+        },
+        {
+          "campaign_id": "120216553317720210",
+          "campaign_name": "CM | TOF | Advantage | UGC Campaign",
+          "spend": 1444.72,
+          "impressions": 123542.0,
+          "clicks": 2233.0,
+          "conversions": 120.0,
+          "ctr": 1.8074824755953443,
+          "cpm": 11.694160690291561,
+          "cpc": 0.6469861173309449,
+          "ctr_index": 177.43789102722803,
+          "cpm_index": 98.65873823054532,
+          "cpc_index": 209.73212686683053,
+          "conversion_rate": 5.373936408419167,
+          "cpa": 12.039333333333333,
+          "conversion_rate_index": 58.31662601208482,
+          "cpa_index": 131.6966554374482,
+          "efficiency_score": 100
         }
       ]
     }
   },
   "recommendations": [
     {
-      "type": "top_creative_scaling",
-      "ad_id": "45678901234",
-      "ad_name": "Product Demo Video",
-      "conversion_rate": 1.4000000000000001,
-      "ctr": 5.0,
-      "severity": "low",
-      "potential_savings": 0,
-      "recommendation": "Scale budget for top-performing ad 'Product Demo Video' with exceptional conversion rate of 1.40% and CTR of 5.00%. Consider creating similar ads based on this winning creative.",
-      "priority_score": 20.0
+      "type": "budget_allocation_imbalance",
+      "performance_metric": "cpa",
+      "bottom_spend_pct": 43.93904067089108,
+      "top_spend_pct": 1.1074967564823346,
+      "severity": "high",
+      "potential_savings": 1168.4050000000002,
+      "recommendation": "Budget allocation is inefficient with 43.9% of spend on the worst-performing campaigns (with highest cpa) versus only 1.1% on the best-performing campaigns. Consider reallocating at least 50% of the budget from the bottom quartile campaigns to the top performers.",
+      "priority_score": 450.0
     }
   ],
   "metrics": {
-    "audience_targeting": {
-      "segments_analyzed": 0,
-      "significant_findings": 0,
-      "recommendation_count": 0
-    },
-    "ad_fatigue": {
-      "fatigued_ads_count": 0,
-      "avg_confidence": 0,
-      "severe_fatigue_count": 0,
-      "moderate_fatigue_count": 0
-    },
-    "creative_performance": {
-      "ads_analyzed": 1,
-      "top_performers_count": 2,
-      "bottom_performers_count": 2,
-      "ctr_gap_pct": 0.0,
-      "conversion_rate_gap_pct": 0.0
+    "budget_efficiency": {
+      "estimated_savings": 1168.4050000000002,
+      "inefficient_entities": 0,
+      "entity_counts": {
+        "campaign": 0,
+        "adset": 0,
+        "ad": 0
+      },
+      "budget_distribution": {
+        "total_spend": 5318.3,
+        "performance_metric": "cpa",
+        "quartiles": {
+          "top_25": {
+            "spend": 58.900000000000006,
+            "spend_pct": 1.1074967564823346,
+            "campaign_count": 1
+          },
+          "mid_high": {
+            "spend": 1444.72,
+            "spend_pct": 27.16507154541865,
+            "campaign_count": 1
+          },
+          "mid_low": {
+            "spend": 1477.8700000000001,
+            "spend_pct": 27.788391027207943,
+            "campaign_count": 1
+          },
+          "bottom_25": {
+            "spend": 2336.8100000000004,
+            "spend_pct": 43.93904067089108,
+            "campaign_count": 3
+          }
+        }
+      }
     }
   },
-  "potential_savings": 0,
-  "potential_improvement_percentage": 1.25
+  "potential_savings": 1168.4050000000002,
+  "potential_improvement_percentage": 6.0
 }

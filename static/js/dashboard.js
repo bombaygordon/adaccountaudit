@@ -379,7 +379,7 @@ function initCampaignChart(data) {
         return;
     }
     
-    // Clear any existing chart - fixed to check if destroy function exists
+    // Clear any existing chart
     if (window.campaignChart && typeof window.campaignChart.destroy === 'function') {
         window.campaignChart.destroy();
     }
@@ -388,8 +388,45 @@ function initCampaignChart(data) {
     let labels = [];
     let values = [];
     
-    // Try to extract campaign performance data
-    if (data.insights && data.insights.campaigns) {
+    console.log("Data structure for chart:", data); // Debug log to see the actual structure
+    
+    // Try to extract campaign performance data from different possible data structures
+    if (data.insights && Array.isArray(data.insights)) {
+        // New structure - the insights array contains campaign data directly
+        const campaignData = data.insights;
+        
+        // Create a map to combine insights by campaign
+        const campaignMap = new Map();
+        
+        // Aggregate insights by campaign_id
+        campaignData.forEach(insight => {
+            if (!insight.campaign_id || !insight.campaign_name) return;
+            
+            if (!campaignMap.has(insight.campaign_id)) {
+                campaignMap.set(insight.campaign_id, {
+                    campaign_id: insight.campaign_id,
+                    campaign_name: insight.campaign_name,
+                    spend: 0
+                });
+            }
+            
+            // Add spend for this insight to the campaign total
+            const campaign = campaignMap.get(insight.campaign_id);
+            campaign.spend += parseFloat(insight.spend || 0);
+        });
+        
+        // Convert map to array and sort by spend
+        const aggregatedCampaigns = Array.from(campaignMap.values())
+            .sort((a, b) => b.spend - a.spend);
+        
+        // Get top 5 campaigns
+        aggregatedCampaigns.slice(0, 5).forEach(campaign => {
+            labels.push(campaign.campaign_name || 'Campaign');
+            values.push(campaign.spend || 0);
+        });
+    } 
+    // Also try the old structure as fallback
+    else if (data.insights && data.insights.campaigns) {
         const campaignData = data.insights.campaigns;
         // Sort by spend
         campaignData.sort((a, b) => (b.spend || 0) - (a.spend || 0));
@@ -399,14 +436,30 @@ function initCampaignChart(data) {
             labels.push(campaign.name || campaign.campaign_name || 'Campaign');
             values.push(campaign.spend || 0);
         });
-    } else {
+    } 
+    // If data is in a completely different format, check for the campaigns array directly
+    else if (data.campaigns && Array.isArray(data.campaigns)) {
+        const campaignData = data.campaigns;
+        // Sort by spend if available
+        if (campaignData[0] && 'spend' in campaignData[0]) {
+            campaignData.sort((a, b) => (b.spend || 0) - (a.spend || 0));
+        }
+        
+        // Get top 5 campaigns
+        campaignData.slice(0, 5).forEach(campaign => {
+            labels.push(campaign.name || 'Campaign');
+            values.push(campaign.spend || 0);
+        });
+    } 
+    else {
         // Sample data if no campaign data is available
+        console.log("Using sample data for chart - no matching data structure found");
         labels = ['Campaign 1', 'Campaign 2', 'Campaign 3', 'Campaign 4', 'Campaign 5'];
         values = [1200, 800, 600, 400, 200];
     }
     
+    // Create new chart
     try {
-        // Create new chart
         window.campaignChart = new Chart(chartCanvas, {
             type: 'bar',
             data: {

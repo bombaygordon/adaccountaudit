@@ -1,6 +1,8 @@
 import logging
 from datetime import datetime, timedelta
 import json
+import time
+import random
 
 # Import Facebook Business SDK
 from facebook_business.api import FacebookAdsApi
@@ -15,6 +17,39 @@ from facebook_business.exceptions import FacebookRequestError
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def retry_with_backoff(max_retries=3, base_delay=5, max_delay=60):
+    """
+    Decorator that implements exponential backoff for functions that might hit rate limits.
+    
+    Args:
+        max_retries (int): Maximum number of retry attempts
+        base_delay (int): Base delay in seconds between retries
+        max_delay (int): Maximum delay in seconds between retries
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries <= max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except FacebookRequestError as e:
+                    # Check if it's a rate limit error
+                    if e.api_error_code() == 17 and "User request limit reached" in str(e):
+                        if retries == max_retries:
+                            logger.warning(f"Rate limit reached and max retries ({max_retries}) exceeded")
+                            raise
+                        
+                        # Calculate delay with exponential backoff and jitter
+                        delay = min(base_delay * (2 ** retries) + random.uniform(0, 1), max_delay)
+                        logger.info(f"Rate limit hit, retrying in {delay:.2f} seconds (attempt {retries+1}/{max_retries})")
+                        time.sleep(delay)
+                        retries += 1
+                    else:
+                        # Re-raise if it's not a rate limit error
+                        raise
+        return wrapper
+    return decorator
 
 class AdPlatformConnector:
     def __init__(self, credentials):
@@ -90,6 +125,9 @@ class AdPlatformConnector:
         
         if platform == 'facebook':
             try:
+                # Add a small delay before making API calls to help avoid rate limits
+                time.sleep(1)
+                
                 logger.info(f"Attempting to fetch real Facebook data for account {account_id}")
                 logger.info(f"Using access token starting with: {self.credentials['fb_access_token'][:15]}...")
                 real_data = self._fetch_facebook_data(account_id, start_date, end_date)
@@ -125,8 +163,46 @@ class AdPlatformConnector:
         elif platform == 'tiktok':
             return self._get_mock_tiktok_data(account_id, start_date, end_date)
     
+    @retry_with_backoff(max_retries=3, base_delay=5, max_delay=60)
+    def _fetch_campaigns(self, account):
+        """Fetch minimal campaign data with retry logic"""
+        logger.info(f"Fetching campaigns for account {account.get_id()[4:]}")
+        return account.get_campaigns(fields=[
+            'id',
+            'name',
+            'status',
+            'spend'
+        ])
+    
+    @retry_with_backoff(max_retries=3, base_delay=5, max_delay=60)
+    def _fetch_insights(self, account, start_date_str, end_date_str):
+        """Fetch only essential insights metrics with retry logic"""
+        logger.info(f"Fetching insights for account {account.get_id()[4:]}")
+        return account.get_insights(
+            params={
+                'time_range': {
+                    'since': start_date_str,
+                    'until': end_date_str
+                },
+                'level': 'campaign',  # Get campaign-level data to reduce volume
+                'time_increment': 1  # Daily breakdown
+            },
+            fields=[
+                'campaign_id',
+                'campaign_name',
+                'spend',
+                'impressions',
+                'clicks',
+                'ctr',
+                'cpc',
+                'actions',       # Needed for conversions
+                'cost_per_action_type'  # Needed for cost per conversion
+            ]
+        )
+    
+    @retry_with_backoff(max_retries=3, base_delay=10, max_delay=120)
     def _fetch_facebook_data(self, account_id, start_date, end_date):
-        """Fetch real data from Facebook Ads API"""
+        """Fetch minimal Facebook data with retry logic"""
         try:
             # Format dates for Facebook API
             start_date_str = start_date.strftime('%Y-%m-%d')
@@ -138,143 +214,37 @@ class AdPlatformConnector:
             # Initialize the Ad Account object
             account = AdAccount(f'act_{account_id}')
             
-            # Fetch campaigns
-            logger.info(f"Fetching campaigns for account {account_id}")
-            campaigns = account.get_campaigns(fields=[
-                'id',
-                'name',
-                'objective',
-                'status',
-                'daily_budget',
-                'lifetime_budget',
-                'start_time',
-                'stop_time',
-                'spend',
-                'buying_type',
-                'bid_strategy',
-                'created_time',
-                'updated_time'
-            ])
+            # Only fetch campaigns
+            campaigns = self._fetch_campaigns(account)
+            campaigns_data = [campaign.export_all_data() for campaign in campaigns]
             
-            # Check if we got campaigns data
             if not campaigns:
                 logger.warning("No campaigns found for this account")
             else:
                 logger.info(f"Found {len(campaigns)} campaigns")
             
-            # Fetch ad sets
-            logger.info(f"Fetching ad sets for account {account_id}")
-            ad_sets = account.get_ad_sets(fields=[
-                'id',
-                'name',
-                'campaign_id',
-                'status',
-                'daily_budget',
-                'lifetime_budget',
-                'targeting',
-                'bid_amount',
-                'optimization_goal',
-                'billing_event',
-                'created_time',
-                'updated_time'
-            ])
+            # Add delay between API calls
+            time.sleep(2)
             
-            if not ad_sets:
-                logger.warning("No ad sets found for this account")
-            else:
-                logger.info(f"Found {len(ad_sets)} ad sets")
-            
-            # Fetch ads
-            logger.info(f"Fetching ads for account {account_id}")
-            ads = account.get_ads(fields=[
-                'id',
-                'name',
-                'adset_id',
-                'campaign_id',
-                'status',
-                'creative',
-                'created_time',
-                'updated_time'
-            ])
-            
-            if not ads:
-                logger.warning("No ads found for this account")
-            else:
-                logger.info(f"Found {len(ads)} ads")
-            
-            # Fetch insights data - FIXED PARAMETERS TO AVOID API ERROR
-            logger.info(f"Fetching insights for account {account_id}")
-            insights = account.get_insights(
-                params={
-                    'time_range': {
-                        'since': start_date_str,
-                        'until': end_date_str
-                    },
-                    'time_increment': 1,  # Daily breakdown
-                    'level': 'ad',
-                    # Keep only basic breakdowns to avoid the "Invalid combination" error
-                    'breakdowns': ['age', 'gender']
-                },
-                fields=[
-                    'date_start',
-                    'campaign_id',
-                    'campaign_name',
-                    'adset_id',
-                    'adset_name',
-                    'ad_id',
-                    'ad_name',
-                    'impressions',
-                    'clicks',
-                    'spend',
-                    'reach',
-                    'frequency',
-                    'cpc',
-                    'cpm',
-                    'ctr',
-                    'unique_clicks',
-                    # Removed 'actions' and related fields as they cause issues with breakdowns
-                    # 'actions',
-                    # 'action_values',
-                    # 'cost_per_action_type',
-                    'video_p25_watched_actions',
-                    'video_p50_watched_actions',
-                    'video_p75_watched_actions',
-                    'video_p100_watched_actions'
-                ]
-            )
+            # Fetch only essential insights
+            insights = self._fetch_insights(account, start_date_str, end_date_str)
+            insights_data = [insight.export_all_data() for insight in insights]
             
             if not insights:
                 logger.warning("No insights data found for this account")
             else:
                 logger.info(f"Found {len(insights)} insights records")
             
-            # Log the counts of fetched objects for debugging
-            logger.info(f"Fetched {len(campaigns)} campaigns, {len(ad_sets)} ad sets, {len(ads)} ads, {len(insights)} insights")
-            
-            # Process and convert to dictionaries for consistency
-            campaigns_data = [campaign.export_all_data() for campaign in campaigns]
-            ad_sets_data = [ad_set.export_all_data() for ad_set in ad_sets]
-            ads_data = [ad.export_all_data() for ad in ads]
-            insights_data = [insight.export_all_data() for insight in insights]
-            
-            # Log sample data for debugging
-            if campaigns_data:
-                logger.info(f"Sample campaign data: {json.dumps(campaigns_data[0], default=str)[:500]}")
-            if insights_data:
-                logger.info(f"Sample insight data: {json.dumps(insights_data[0], default=str)[:500]}")
-            
-            # Process insights data to extract purchase actions
+            # Process insights to extract the specific metrics we need
             self._process_facebook_insights(insights_data)
             
-            # Return the structured data
+            # Return only the needed data
             result = {
                 'campaigns': campaigns_data,
-                'ad_sets': ad_sets_data,
-                'ads': ads_data,
                 'insights': insights_data
             }
             
-            logger.info(f"Returning real Facebook data with {len(campaigns_data)} campaigns, {len(insights_data)} insights")
+            logger.info(f"Returning minimal Facebook data with {len(campaigns_data)} campaigns, {len(insights_data)} insights")
             return result
             
         except FacebookRequestError as e:
@@ -288,7 +258,7 @@ class AdPlatformConnector:
             raise
     
     def _process_facebook_insights(self, insights_data):
-        """Process Facebook insights to extract actions and make data more usable"""
+        """Process Facebook insights to extract only the specific metrics needed"""
         if not insights_data:
             logger.warning("No insights data to process")
             return
@@ -301,39 +271,40 @@ class AdPlatformConnector:
             if 'date_start' in insight:
                 insight['date'] = insight['date_start']
             
-            # Extract purchase actions
+            # Extract conversion data
             if 'actions' in insight and isinstance(insight['actions'], list):
-                # Extract purchase conversions
-                purchases = next((
+                # Extract conversions (purchase or complete_registration)
+                conversions = next((
                     action.get('value', 0) 
                     for action in insight['actions'] 
-                    if action.get('action_type') == 'purchase'
+                    if action.get('action_type') == 'purchase' or action.get('action_type') == 'complete_registration'
                 ), 0)
                 
-                insight['purchases'] = float(purchases) if purchases else 0
+                insight['conversions'] = float(conversions) if conversions else 0
                 
-                # Extract other important actions
-                for action_type in ['link_click', 'page_engagement', 'video_view']:
-                    value = next((
-                        action.get('value', 0) 
-                        for action in insight['actions'] 
-                        if action.get('action_type') == action_type
-                    ), 0)
-                    
-                    insight[f'{action_type}s'] = float(value) if value else 0
-            
-            # Extract action values (revenue)
-            if 'action_values' in insight and isinstance(insight['action_values'], list):
-                purchase_value = next((
+                # Extract link clicks
+                link_clicks = next((
                     action.get('value', 0) 
-                    for action in insight['action_values'] 
-                    if action.get('action_type') == 'purchase'
+                    for action in insight['actions'] 
+                    if action.get('action_type') == 'link_click'
                 ), 0)
                 
-                insight['revenue'] = float(purchase_value) if purchase_value else 0
+                insight['link_clicks'] = float(link_clicks) if link_clicks else 0
+                
+                # Keep the actions field as it might be needed for more detailed analysis
             
-            # Clean up data types
-            for field in ['impressions', 'clicks', 'spend', 'reach']:
+            # Extract cost per conversion
+            if 'cost_per_action_type' in insight and isinstance(insight['cost_per_action_type'], list):
+                cpa = next((
+                    action.get('value', 0) 
+                    for action in insight['cost_per_action_type'] 
+                    if action.get('action_type') == 'purchase' or action.get('action_type') == 'complete_registration'
+                ), 0)
+                
+                insight['cost_per_conversion'] = float(cpa) if cpa else 0
+            
+            # Clean up data types for the fields we're keeping
+            for field in ['impressions', 'clicks', 'spend']:
                 if field in insight:
                     insight[field] = float(insight[field]) if insight[field] else 0
             
@@ -342,114 +313,77 @@ class AdPlatformConnector:
         logger.info(f"Processed {processed_count} insights records")
     
     def _get_mock_facebook_data(self, account_id, start_date, end_date):
-        """Generate mock Facebook ad data for development"""
+        """Generate mock Facebook ad data with only the fields we need"""
         logger.warning(f"Using mock data for Facebook account {account_id}")
         return {
             'campaigns': [
                 {
                     'id': '23456789012',
                     'name': 'Summer Sale',
-                    'objective': 'CONVERSIONS',
                     'status': 'ACTIVE',
-                    'daily_budget': 50.00,
                     'spend': 1200.00
                 },
                 {
                     'id': '23456789013',
                     'name': 'Brand Awareness',
-                    'objective': 'BRAND_AWARENESS',
                     'status': 'ACTIVE',
-                    'daily_budget': 30.00,
                     'spend': 800.00
-                }
-            ],
-            'ad_sets': [
-                {
-                    'id': '34567890123',
-                    'name': 'US Women 25-45',
-                    'campaign_id': '23456789012',
-                    'targeting': {'age_min': 25, 'age_max': 45, 'genders': [1]},
-                    'status': 'ACTIVE',
-                    'daily_budget': 25.00
-                }
-            ],
-            'ads': [
-                {
-                    'id': '45678901234',
-                    'name': 'Product Demo Video',
-                    'adset_id': '34567890123',
-                    'status': 'ACTIVE'
                 }
             ],
             'insights': [
                 {
                     'campaign_id': '23456789012',
                     'campaign_name': 'Summer Sale',
-                    'adset_id': '34567890123',
-                    'adset_name': 'US Women 25-45',
-                    'ad_id': '45678901234',
-                    'ad_name': 'Product Demo Video',
                     'impressions': 50000,
                     'clicks': 2500,
                     'spend': 1200.00,
                     'ctr': 5.0,
-                    'frequency': 2.4,
-                    'reach': 20000,
+                    'cpc': 0.48,
                     'date': '2023-02-15',
-                    'age': '25-34',
-                    'gender': 'female',
-                    'device': 'mobile',
-                    'purchases': 35
+                    'conversions': 35,
+                    'link_clicks': 2500,
+                    'cost_per_conversion': 34.29
+                },
+                {
+                    'campaign_id': '23456789013',
+                    'campaign_name': 'Brand Awareness',
+                    'impressions': 100000,
+                    'clicks': 3000,
+                    'spend': 800.00,
+                    'ctr': 3.0,
+                    'cpc': 0.27,
+                    'date': '2023-02-15',
+                    'conversions': 20,
+                    'link_clicks': 3000,
+                    'cost_per_conversion': 40.00
                 }
             ]
         }
     
     def _get_mock_tiktok_data(self, account_id, start_date, end_date):
-        """Generate mock TikTok ad data for development"""
+        """Generate mock TikTok ad data with only the fields we need"""
         return {
             'campaigns': [
                 {
                     'id': '6745891234',
                     'name': 'TikTok Product Launch',
-                    'objective': 'CONVERSIONS',
                     'status': 'ACTIVE',
-                    'budget': 40.00,
                     'spend': 950.00
-                }
-            ],
-            'ad_groups': [
-                {
-                    'id': '7856234598',
-                    'name': 'Teen Audience',
-                    'campaign_id': '6745891234',
-                    'status': 'ACTIVE',
-                    'budget': 40.00
-                }
-            ],
-            'ads': [
-                {
-                    'id': '8967452301',
-                    'name': 'Dance Challenge',
-                    'ad_group_id': '7856234598',
-                    'status': 'ACTIVE'
                 }
             ],
             'insights': [
                 {
                     'campaign_id': '6745891234',
                     'campaign_name': 'TikTok Product Launch',
-                    'ad_group_id': '7856234598',
-                    'ad_group_name': 'Teen Audience',
-                    'ad_id': '8967452301',
-                    'ad_name': 'Dance Challenge',
                     'impressions': 70000,
                     'clicks': 3500,
                     'spend': 950.00,
                     'ctr': 5.0,
-                    'frequency': 3.1,
-                    'reach': 22500,
+                    'cpc': 0.27,
                     'date': '2023-02-15',
-                    'conversions': 42
+                    'conversions': 42,
+                    'link_clicks': 3500,
+                    'cost_per_conversion': 22.62
                 }
             ]
         }
