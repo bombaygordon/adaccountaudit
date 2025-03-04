@@ -15,6 +15,17 @@ import pandas as pd
 import json
 from matplotlib.colors import LinearSegmentedColormap
 
+# Define JSON serializer for NumPy types
+def json_serialize(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
 class EnhancedReportGenerator:
     """
     Generate comprehensive, data-driven audit reports with advanced 
@@ -365,6 +376,138 @@ class EnhancedReportGenerator:
         
         # Convert to base64 image
         return self._fig_to_base64(plt.gcf())
+    
+    def _fig_to_base64(self, fig):
+        """
+        Convert a matplotlib figure to a base64 encoded string.
+        
+        Args:
+            fig (Figure): Matplotlib figure
+            
+        Returns:
+            str: Base64 encoded string
+        """
+        # Create a bytes buffer for the image
+        buf = io.BytesIO()
+        
+        # Save the figure to the buffer
+        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        
+        # Close the figure to free memory
+        plt.close(fig)
+        
+        # Get the image data from the buffer and encode as base64
+        buf.seek(0)
+        img_data = base64.b64encode(buf.read()).decode('utf-8')
+        
+        return img_data
+    
+    def _render_template(self, template_name, data):
+        """
+        Render HTML template with the provided data.
+        
+        Args:
+            template_name (str): Name of the template file
+            data (dict): Data to render in the template
+            
+        Returns:
+            str: Rendered HTML content
+        """
+        # Set up template environment
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader('reporting/templates'),
+            autoescape=jinja2.select_autoescape(['html', 'xml'])
+        )
+        
+        # Add custom filters
+        env.filters['currency'] = lambda value: f"${float(value):,.2f}"
+        env.filters['number'] = lambda value: f"{float(value):,}"
+        env.filters['percentage'] = lambda value: f"{float(value):.2f}%"
+        
+        try:
+            # Load template
+            template = env.get_template(template_name)
+            
+            # Fix items before rendering
+            if 'categorized_recommendations' in data:
+                # Convert items to list before slicing to avoid TypeError
+                for category in data['categorized_recommendations'].values():
+                    if 'items' in category and not isinstance(category['items'], list):
+                        category['items'] = list(category['items'])
+            
+            # Render template with data
+            return template.render(**data)
+        except jinja2.exceptions.TemplateNotFound:
+            self.logger.error(f"Template '{template_name}' not found")
+            
+            # Use a basic fallback template
+            fallback_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Ad Account Audit Report</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    h1 { color: #ff6b35; }
+                </style>
+            </head>
+            <body>
+                <h1>Ad Account Audit Report</h1>
+                <h2>{{ client_name }}</h2>
+                <p>Report Date: {{ report_date }}</p>
+                <h3>Summary</h3>
+                <p>Potential Savings: {{ potential_savings }}</p>
+                <p>Improvement Percentage: {{ improvement_percentage }}</p>
+            </body>
+            </html>
+            """
+            fallback_template = jinja2.Template(fallback_html)
+            return fallback_template.render(**data)
+    
+    def _generate_pdf(self, html_content, filename=None, client_name="Client"):
+        """
+        Generate PDF from HTML content.
+        
+        Args:
+            html_content (str): HTML content to convert to PDF
+            filename (str, optional): Custom filename for the PDF
+            client_name (str): Client name for the default filename
+            
+        Returns:
+            str: Path to the generated PDF file
+        """
+        # Generate filename if not provided
+        if not filename:
+            sanitized_name = client_name.replace(' ', '_').lower()
+            date_str = datetime.now().strftime('%Y%m%d')
+            filename = f"{sanitized_name}_audit_report_{date_str}.pdf"
+        
+        # Ensure filename has .pdf extension
+        if not filename.endswith('.pdf'):
+            filename += '.pdf'
+        
+        # Define output path
+        output_path = os.path.join(self.report_dir, filename)
+        
+        # Configure PDF options
+        options = {
+            'page-size': 'Letter',
+            'margin-top': '0.75in',
+            'margin-right': '0.75in',
+            'margin-bottom': '0.75in',
+            'margin-left': '0.75in',
+            'encoding': 'UTF-8',
+            'no-outline': None,
+            'enable-local-file-access': None
+        }
+        
+        try:
+            # Generate PDF using pdfkit (wkhtmltopdf wrapper)
+            pdfkit.from_string(html_content, output_path, options=options)
+            return output_path
+        except Exception as e:
+            self.logger.error(f"Error generating PDF: {e}")
+            return None
     
     def _generate_performance_chart(self, results):
         """
@@ -815,136 +958,7 @@ class EnhancedReportGenerator:
         ax.set_theta_zero_location('N')
         ax.set_thetagrids([])
         ax.set_rgrids([])
-        ax.set_ylim(0, 1)
         ax.spines['polar'].set_visible(False)
         ax.grid(False)
         
         plt.tight_layout()
-        
-        # Convert to base64 image
-        return self._fig_to_base64(plt.gcf())
-    
-    def _fig_to_base64(self, fig):
-        """
-        Convert a matplotlib figure to a base64 encoded string.
-        
-        Args:
-            fig (Figure): Matplotlib figure
-            
-        Returns:
-            str: Base64 encoded string
-        """
-        # Create a bytes buffer for the image
-        buf = io.BytesIO()
-        
-        # Save the figure to the buffer
-        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-        
-        # Close the figure to free memory
-        plt.close(fig)
-        
-        # Get the image data from the buffer and encode as base64
-        buf.seek(0)
-        img_data = base64.b64encode(buf.read()).decode('utf-8')
-        
-        return img_data
-    
-    def _render_template(self, template_name, data):
-        """
-        Render HTML template with the provided data.
-        
-        Args:
-            template_name (str): Name of the template file
-            data (dict): Data to render in the template
-            
-        Returns:
-            str: Rendered HTML content
-        """
-        # Set up template environment
-        env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader('reporting/templates'),
-            autoescape=jinja2.select_autoescape(['html', 'xml'])
-        )
-        
-        # Add custom filters
-        env.filters['currency'] = lambda value: f"${float(value):,.2f}"
-        env.filters['number'] = lambda value: f"{float(value):,}"
-        env.filters['percentage'] = lambda value: f"{float(value):.2f}%"
-        
-        try:
-            # Load template
-            template = env.get_template(template_name)
-            
-            # Render template with data
-            return template.render(**data)
-        except jinja2.exceptions.TemplateNotFound:
-            self.logger.error(f"Template '{template_name}' not found")
-            
-            # Use a basic fallback template
-            fallback_html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Ad Account Audit Report</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 40px; }
-                    h1 { color: #ff6b35; }
-                </style>
-            </head>
-            <body>
-                <h1>Ad Account Audit Report</h1>
-                <h2>{{ client_name }}</h2>
-                <p>Report Date: {{ report_date }}</p>
-                <h3>Summary</h3>
-                <p>Potential Savings: {{ potential_savings }}</p>
-                <p>Improvement Percentage: {{ improvement_percentage }}</p>
-            </body>
-            </html>
-            """
-            fallback_template = jinja2.Template(fallback_html)
-            return fallback_template.render(**data)
-    
-    def _generate_pdf(self, html_content, filename=None, client_name="Client"):
-        """
-        Generate PDF from HTML content.
-        
-        Args:
-            html_content (str): HTML content to convert to PDF
-            filename (str, optional): Custom filename for the PDF
-            client_name (str): Client name for the default filename
-            
-        Returns:
-            str: Path to the generated PDF file
-        """
-        # Generate filename if not provided
-        if not filename:
-            sanitized_name = client_name.replace(' ', '_').lower()
-            date_str = datetime.now().strftime('%Y%m%d')
-            filename = f"{sanitized_name}_audit_report_{date_str}.pdf"
-        
-        # Ensure filename has .pdf extension
-        if not filename.endswith('.pdf'):
-            filename += '.pdf'
-        
-        # Define output path
-        output_path = os.path.join(self.report_dir, filename)
-        
-        # Configure PDF options
-        options = {
-            'page-size': 'Letter',
-            'margin-top': '0.75in',
-            'margin-right': '0.75in',
-            'margin-bottom': '0.75in',
-            'margin-left': '0.75in',
-            'encoding': 'UTF-8',
-            'no-outline': None,
-            'enable-local-file-access': None
-        }
-        
-        try:
-            # Generate PDF using pdfkit (wkhtmltopdf wrapper)
-            pdfkit.from_string(html_content, output_path, options=options)
-            return output_path
-        except Exception as e:
-            self.logger.error(f"Error generating PDF: {e}")
-            return None

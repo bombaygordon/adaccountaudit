@@ -6,7 +6,9 @@ from analysis.analyzer import AdAccountAnalyzer
 from auth.models import Client, db
 import logging
 import requests
-from enhanced_audit import EnhancedAdAccountAudit
+from enhanced_audit import EnhancedAdAccountAudit, json_serialize
+import json
+import numpy as np
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -222,7 +224,8 @@ def audit():
         'potential_improvement_percentage': 15.5  # Default value if not available from analysis
     }
     
-    return jsonify(audit_result)
+    # Use custom JSON serializer for NumPy types
+    return jsonify(json.loads(json.dumps(audit_result, default=json_serialize)))
 
 # Find this function in api/routes.py
 @api_bp.route('/audit/facebook', methods=['POST'])
@@ -282,10 +285,11 @@ def audit_facebook():
         
         logger.info("Audit analysis complete, returning results")
         
-        # Return the real audit results
+        # Return the real audit results with custom JSON serialization for NumPy types
+        serialized_result = json.loads(json.dumps(audit_result, default=json_serialize))
         return jsonify({
             'success': True,
-            'results': audit_result
+            'results': serialized_result
         })
         
     except Exception as e:
@@ -318,3 +322,37 @@ def get_clients():
         'success': True,
         'clients': client_list
     })
+
+@api_bp.route('/test-audit', methods=['GET'])
+def test_audit():
+    """Return test audit data for development"""
+    # Create mock audit results
+    mock_results = {
+        'success': True,
+        'potential_savings': 450.75,
+        'potential_improvement_percentage': 15.5,
+        'recommendations': [
+            {
+                'type': 'budget_efficiency',
+                'severity': 'high',
+                'recommendation': 'Consider reducing budget or revising creative for campaign "Summer Sale" as its CPA ($34.29) is significantly higher than average ($25.00).',
+                'potential_savings': 250.0
+            },
+            {
+                'type': 'audience_targeting',
+                'severity': 'medium',
+                'recommendation': 'Gender "male" significantly underperforms with a CTR of 2.10% vs 5.00% for "female". Consider rebalancing budget allocation.',
+                'potential_savings': 125.0
+            },
+            {
+                'type': 'creative_performance',
+                'severity': 'low',
+                'recommendation': 'Consider pausing underperforming ad "Product Video" with low conversion rate of 1.20% compared to top performer at 4.50%.',
+                'potential_savings': 75.0
+            }
+        ],
+        'timestamp': datetime.now().isoformat(),
+        'platform': 'facebook'
+    }
+    
+    return jsonify(mock_results)

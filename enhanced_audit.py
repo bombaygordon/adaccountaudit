@@ -4,6 +4,7 @@ import sys
 import json
 from datetime import datetime
 from pathlib import Path
+import numpy as np
 
 # Import our enhanced components
 from analysis.enhanced_analyzer import EnhancedAdAccountAnalyzer
@@ -19,6 +20,20 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('enhanced_audit')
+
+# Custom JSON serializer for handling NumPy types
+def json_serialize(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (datetime, np.datetime64)):
+        return obj.isoformat()
+    return obj
 
 class EnhancedAdAccountAudit:
     """
@@ -81,15 +96,13 @@ class EnhancedAdAccountAudit:
             # Check that required keys are present
             for key in ['campaigns', 'insights']:
                 if key not in account_data:
-                    self.logger.warning(f"Missing key '{key}' in account data")
+                    self.logger.warning(f"Missing key '{key}' in account data, adding empty list")
+                    account_data[key] = []
                     
             # Verify insights is a list and has items
-            if 'insights' in account_data:
-                if not isinstance(account_data['insights'], list):
-                    self.logger.error(f"Invalid insights format: expected list, got {type(account_data['insights'])}")
-                    raise ValueError(f"Invalid insights data format in account_data")
-                elif len(account_data['insights']) == 0:
-                    self.logger.warning(f"Empty insights list in account data")
+            if not isinstance(account_data['insights'], list):
+                self.logger.error(f"Invalid insights format: expected list, got {type(account_data['insights'])}")
+                account_data['insights'] = []
             
             # Run enhanced analysis
             self.logger.info(f"Running analysis on {platform} data")
@@ -103,11 +116,15 @@ class EnhancedAdAccountAudit:
             report_path = None
             if generate_report:
                 self.logger.info(f"Generating report for {client_name}")
-                report_path = self.report_generator.generate_report(
-                    analysis_results, 
-                    client_name, 
-                    agency_name
-                )
+                try:
+                    report_path = self.report_generator.generate_report(
+                        analysis_results, 
+                        client_name, 
+                        agency_name
+                    )
+                except Exception as report_error:
+                    self.logger.error(f"Error generating report: {report_error}", exc_info=True)
+                    # Continue without report instead of failing the whole audit
             
             # Prepare audit result
             audit_result = {
@@ -157,9 +174,9 @@ class EnhancedAdAccountAudit:
             # Define cache path
             cache_path = os.path.join(self.cache_dir, filename)
             
-            # Save to JSON file
+            # Save to JSON file with custom serialization for NumPy types
             with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(analysis_results, f, indent=2)
+                json.dump(analysis_results, f, indent=2, default=json_serialize)
                 
             self.logger.info(f"Analysis results cached to {cache_path}")
             
@@ -240,37 +257,3 @@ class EnhancedAdAccountAudit:
         except Exception as e:
             self.logger.error(f"Error generating report from cache: {e}")
             return None
-
-
-# Example usage
-if __name__ == "__main__":
-    # Sample usage
-    from ad_platform.connector import AdPlatformConnector
-    
-    # Initialize components
-    enhanced_audit = EnhancedAdAccountAudit()
-    connector = AdPlatformConnector({'fb_access_token': 'your_token_here'})
-    
-    # Connect to platform
-    connector.connect_facebook()
-    
-    # Fetch data
-    account_data = connector.fetch_account_data('facebook', '123456789', days_lookback=30)
-    
-    # Run audit
-    audit_result = enhanced_audit.run_audit(
-        account_data, 
-        platform='facebook',
-        client_name='Example Client',
-        agency_name='Your Agency',
-        generate_report=True
-    )
-    
-    # Print results summary
-    if audit_result['success']:
-        print(f"Audit completed successfully")
-        print(f"Potential savings: ${audit_result['analysis_results']['potential_savings']:.2f}")
-        print(f"Improvement potential: {audit_result['analysis_results']['potential_improvement_percentage']:.1f}%")
-        print(f"Report saved to: {audit_result['report_path']}")
-    else:
-        print(f"Audit failed: {audit_result['error']}")

@@ -338,7 +338,7 @@
                 </div>
             </div>
             
-            {% if charts.improvement_gauge %}
+            {% if charts and charts.improvement_gauge %}
             <div class="chart-container">
                 <img src="data:image/png;base64,{{ charts.improvement_gauge }}" alt="Improvement Potential Gauge" class="chart-image">
             </div>
@@ -383,7 +383,7 @@
                 </div>
             </div>
             
-            {% if charts.performance_comparison %}
+            {% if charts and charts.performance_comparison %}
             <div class="chart-container">
                 <h3>Performance vs. Industry Benchmarks</h3>
                 <img src="data:image/png;base64,{{ charts.performance_comparison }}" alt="Performance Comparison" class="chart-image">
@@ -396,7 +396,7 @@
             
             <div class="two-column">
                 <div class="column">
-                    {% if charts.savings_distribution %}
+                    {% if charts and charts.savings_distribution %}
                     <div class="chart-container">
                         <h3>Potential Savings by Category</h3>
                         <img src="data:image/png;base64,{{ charts.savings_distribution }}" alt="Savings Distribution" class="chart-image">
@@ -404,7 +404,7 @@
                     {% endif %}
                 </div>
                 <div class="column">
-                    {% if charts.recommendations_by_category %}
+                    {% if charts and charts.recommendations_by_category %}
                     <div class="chart-container">
                         <h3>Recommendations by Category</h3>
                         <img src="data:image/png;base64,{{ charts.recommendations_by_category }}" alt="Recommendations by Category" class="chart-image">
@@ -416,49 +416,96 @@
             <div class="recommendations-container">
                 <h3>Priority Recommendations</h3>
                 
-                {% for category, data in categorized_recommendations.items() %}
-                <div class="recommendation-category">
-                    <h3>
-                        <i class="icon-{{ data.icon }}"></i>
-                        {{ data.title }} ({{ data.items|count if data.items is iterable else 0 }} recommendations)
-                    </h3>
-                    
-                    {% for rec in data.items[:3] %}
-                    <div class="recommendation {% if rec.severity == 'high' %}high-priority{% elif rec.severity == 'medium' %}medium-priority{% else %}low-priority{% endif %}">
-                        <div class="recommendation-header">
-                            <div class="recommendation-title">
-                                {% if 'campaign_name' in rec %}
-                                Campaign: {{ rec.campaign_name }}
-                                {% elif 'adset_name' in rec %}
-                                Ad Set: {{ rec.adset_name }}
-                                {% elif 'ad_name' in rec %}
-                                Ad: {{ rec.ad_name }}
-                                {% elif 'segment_type' in rec %}
-                                Segment: {{ rec.segment_type }}
-                                {% else %}
-                                Optimization Opportunity
+                {% if categorized_recommendations %}
+                    {% for category_key, cat_data in categorized_recommendations.items() %}
+                    <div class="recommendation-category">
+                        <h3>
+                            <i class="icon-{{ cat_data.icon }}"></i>
+                            {{ cat_data.title }} ({{ cat_data.items|length if cat_data.items is defined and cat_data.items is iterable else 0 }} recommendations)
+                        </h3>
+                        
+                        {% if cat_data.items is defined and cat_data.items is iterable %}
+                            {% for recommendation in cat_data.items %}
+                                {% if loop.index <= 3 %}
+                                <div class="recommendation {% if recommendation.severity == 'high' %}high-priority{% elif recommendation.severity == 'medium' %}medium-priority{% else %}low-priority{% endif %}">
+                                    <div class="recommendation-header">
+                                        <div class="recommendation-title">
+                                            {% if 'campaign_name' in recommendation %}
+                                            Campaign: {{ recommendation.campaign_name }}
+                                            {% elif 'adset_name' in recommendation %}
+                                            Ad Set: {{ recommendation.adset_name }}
+                                            {% elif 'ad_name' in recommendation %}
+                                            Ad: {{ recommendation.ad_name }}
+                                            {% elif 'segment_type' in recommendation %}
+                                            Segment: {{ recommendation.segment_type }}
+                                            {% else %}
+                                            Optimization Opportunity
+                                            {% endif %}
+                                        </div>
+                                        <div class="recommendation-priority priority-{{ recommendation.severity }}">
+                                            {{ recommendation.severity|capitalize }} Priority
+                                        </div>
+                                    </div>
+                                    <p class="recommendation-text">{{ recommendation.recommendation }}</p>
+                                    {% if recommendation.potential_savings is defined and recommendation.potential_savings > 0 %}
+                                    <p class="recommendation-savings">Potential Savings: ${{ "%.2f"|format(recommendation.potential_savings) }}</p>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
-                            </div>
-                            <div class="recommendation-priority priority-{{ rec.severity }}">
-                                {{ rec.severity|capitalize }} Priority
-                            </div>
-                        </div>
-                        <p class="recommendation-text">{{ rec.recommendation }}</p>
-                        {% if rec.potential_savings > 0 %}
-                        <p class="recommendation-savings">Potential Savings: ${{ "%.2f"|format(rec.potential_savings) }}</p>
+                            {% endfor %}
+                            
+                            {% if cat_data.items|length > 3 %}
+                            <p><em>+ {{ cat_data.items|length - 3 }} more recommendations in this category</em></p>
+                            {% endif %}
                         {% endif %}
                     </div>
                     {% endfor %}
-                    
-                    {% if data.items|length > 3 %}
-                    <p><em>+ {{ data.items|length - 3 }} more recommendations in this category</em></p>
-                    {% endif %}
-                </div>
-                {% endfor %}
+                {% elif recommendations %}
+                    <div class="recommendation-category">
+                        <h3>General Recommendations</h3>
+                        
+                        {% for recommendation in recommendations %}
+                            {% if loop.index <= 5 %}
+                            <div class="recommendation {% if recommendation.severity == 'high' %}high-priority{% elif recommendation.severity == 'medium' %}medium-priority{% else %}low-priority{% endif %}">
+                                <div class="recommendation-header">
+                                    <div class="recommendation-title">
+                                        {% if 'campaign_name' in recommendation %}
+                                        Campaign: {{ recommendation.campaign_name }}
+                                        {% elif 'adset_name' in recommendation %}
+                                        Ad Set: {{ recommendation.adset_name }}
+                                        {% elif 'ad_name' in recommendation %}
+                                        Ad: {{ recommendation.ad_name }}
+                                        {% elif 'segment_type' in recommendation %}
+                                        Segment: {{ recommendation.segment_type }}
+                                        {% else %}
+                                        Optimization Opportunity
+                                        {% endif %}
+                                    </div>
+                                    <div class="recommendation-priority priority-{{ recommendation.severity }}">
+                                        {{ recommendation.severity|capitalize }} Priority
+                                    </div>
+                                </div>
+                                <p class="recommendation-text">{{ recommendation.recommendation }}</p>
+                                {% if recommendation.potential_savings is defined and recommendation.potential_savings > 0 %}
+                                <p class="recommendation-savings">Potential Savings: ${{ "%.2f"|format(recommendation.potential_savings) }}</p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if recommendations|length > 5 %}
+                        <p><em>+ {{ recommendations|length - 5 }} more recommendations available</em></p>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="recommendation-category">
+                        <p>No recommendations available at this time.</p>
+                    </div>
+                {% endif %}
             </div>
         </div>
         
-        {% if 'audience_insights' in charts %}
+        {% if charts and charts.audience_insights %}
         <div class="section">
             <h2>Audience Insights</h2>
             
@@ -470,7 +517,7 @@
         </div>
         {% endif %}
         
-        {% if 'budget_allocation' in charts %}
+        {% if charts and charts.budget_allocation %}
         <div class="section">
             <h2>Budget Allocation Analysis</h2>
             

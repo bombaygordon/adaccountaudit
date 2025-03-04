@@ -202,7 +202,7 @@ class AdPlatformConnector:
             else:
                 logger.info(f"Found {len(ads)} ads")
             
-            # Fetch insights data
+            # Fetch insights data - FIXED PARAMETERS TO AVOID API ERROR
             logger.info(f"Fetching insights for account {account_id}")
             insights = account.get_insights(
                 params={
@@ -212,7 +212,8 @@ class AdPlatformConnector:
                     },
                     'time_increment': 1,  # Daily breakdown
                     'level': 'ad',
-                    'breakdowns': ['age', 'gender', 'device_platform']
+                    # Keep only basic breakdowns to avoid the "Invalid combination" error
+                    'breakdowns': ['age', 'gender']
                 },
                 fields=[
                     'date_start',
@@ -231,9 +232,10 @@ class AdPlatformConnector:
                     'cpm',
                     'ctr',
                     'unique_clicks',
-                    'actions',
-                    'action_values',
-                    'cost_per_action_type',
+                    # Removed 'actions' and related fields as they cause issues with breakdowns
+                    # 'actions',
+                    # 'action_values',
+                    # 'cost_per_action_type',
                     'video_p25_watched_actions',
                     'video_p50_watched_actions',
                     'video_p75_watched_actions',

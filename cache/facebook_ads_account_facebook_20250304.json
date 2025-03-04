@@ -1,6 +1,114 @@
 {
-  "timestamp": "2025-03-04T16:18:58.856014",
+  "timestamp": "2025-03-04T19:27:09.609945",
   "platform": "facebook",
   "account_overview": {
     "total_spend": 1200.0,
-    "total_impressions": 
+    "total_impressions": 50000,
+    "total_clicks": 2500,
+    "total_conversions": 35,
+    "total_revenue": 0,
+    "ctr": 5.0,
+    "cpc": 0.48,
+    "cpm": 24.0,
+    "conversion_rate": 1.4000000000000001,
+    "cpa": 34.285714285714285,
+    "roas": 0,
+    "active_campaigns": 2,
+    "total_campaigns": 2,
+    "active_ad_sets": 1,
+    "total_ad_sets": 1,
+    "active_ads": 1,
+    "total_ads": 1
+  },
+  "insights": {
+    "audience_targeting": {},
+    "ad_fatigue": [],
+    "creative_performance": {
+      "total_ads_analyzed": 1,
+      "top_performers": [
+        {
+          "ad_id": "45678901234",
+          "ad_name": "Product Demo Video",
+          "impressions": 50000,
+          "clicks": 2500,
+          "ctr": 5.0,
+          "metric": "ctr"
+        },
+        {
+          "ad_id": "45678901234",
+          "ad_name": "Product Demo Video",
+          "clicks": 2500,
+          "conversions": 35,
+          "conversion_rate": 1.4000000000000001,
+          "metric": "conversion_rate"
+        }
+      ],
+      "bottom_performers": [
+        {
+          "ad_id": "45678901234",
+          "ad_name": "Product Demo Video",
+          "impressions": 50000,
+          "clicks": 2500,
+          "ctr": 5.0,
+          "metric": "ctr"
+        },
+        {
+          "ad_id": "45678901234",
+          "ad_name": "Product Demo Video",
+          "clicks": 2500,
+          "conversions": 35,
+          "conversion_rate": 1.4000000000000001,
+          "metric": "conversion_rate"
+        }
+      ],
+      "recommendations": [
+        {
+          "type": "top_creative_scaling",
+          "ad_id": "45678901234",
+          "ad_name": "Product Demo Video",
+          "conversion_rate": 1.4000000000000001,
+          "ctr": 5.0,
+          "severity": "low",
+          "potential_savings": 0,
+          "recommendation": "Scale budget for top-performing ad 'Product Demo Video' with exceptional conversion rate of 1.40% and CTR of 5.00%. Consider creating similar ads based on this winning creative.",
+          "priority_score": 20.0
+        }
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "top_creative_scaling",
+      "ad_id": "45678901234",
+      "ad_name": "Product Demo Video",
+      "conversion_rate": 1.4000000000000001,
+      "ctr": 5.0,
+      "severity": "low",
+      "potential_savings": 0,
+      "recommendation": "Scale budget for top-performing ad 'Product Demo Video' with exceptional conversion rate of 1.40% and CTR of 5.00%. Consider creating similar ads based on this winning creative.",
+      "priority_score": 20.0
+    }
+  ],
+  "metrics": {
+    "audience_targeting": {
+      "segments_analyzed": 0,
+      "significant_findings": 0,
+      "recommendation_count": 0
+    },
+    "ad_fatigue": {
+      "fatigued_ads_count": 0,
+      "avg_confidence": 0,
+      "severe_fatigue_count": 0,
+      "moderate_fatigue_count": 0
+    },
+    "creative_performance": {
+      "ads_analyzed": 1,
+      "top_performers_count": 2,
+      "bottom_performers_count": 2,
+      "ctr_gap_pct": 0.0,
+      "conversion_rate_gap_pct": 0.0
+    }
+  },
+  "potential_savings": 0,
+  "potential_improvement_percentage": 1.25
+}
