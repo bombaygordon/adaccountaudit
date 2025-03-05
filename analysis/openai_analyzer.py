@@ -19,10 +19,8 @@ class OpenAIAdAnalyzer:
         """Initialize the analyzer with OpenAI API key."""
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         if not self.api_key:
+            logger.error("OpenAI API key not found")
             raise ValueError("OpenAI API key not found in environment variables")
-            
-        # Log the first few characters of the API key for debugging
-        logger.info(f"Using OpenAI API key starting with: {self.api_key[:8]}...")
         
         # Initialize OpenAI client with timeout and retry settings
         self.client = OpenAI(
@@ -100,25 +98,30 @@ class OpenAIAdAnalyzer:
 
     def _format_ad_data(self, data: Dict[str, Any]) -> str:
         """Format ad account data for AI analysis."""
-        campaigns = data.get('campaigns', [])
-        ad_sets = data.get('ad_sets', [])
-        ads = data.get('ads', [])
-        
-        prompt = "Here is the raw Facebook Ads account data with full conversion tracking:\n\n"
-        
-        # Add account-level summary
-        total_spend = sum(float(campaign.get('spend', 0)) for campaign in campaigns)
-        total_impressions = sum(int(campaign.get('impressions', 0)) for campaign in campaigns)
-        total_clicks = sum(int(campaign.get('clicks', 0)) for campaign in campaigns)
-        total_conversions = sum(int(campaign.get('conversions', 0)) for campaign in campaigns)
-        
-        # Calculate funnel metrics
-        ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
-        conversion_rate = (total_conversions / total_clicks * 100) if total_clicks > 0 else 0
-        cpc = (total_spend / total_clicks) if total_clicks > 0 else 0
-        cpa = (total_spend / total_conversions) if total_conversions > 0 else 0
-        
-        prompt += f"""Account Overview and Conversion Funnel:
+        try:
+            campaigns = data.get('campaigns', [])
+            ad_sets = data.get('ad_sets', [])
+            ads = data.get('ads', [])
+            
+            # Create lookup dictionaries for faster access
+            campaign_lookup = {c.get('id'): c.get('name', 'Unknown') for c in campaigns}
+            adset_lookup = {a.get('id'): a.get('name', 'Unknown') for a in ad_sets}
+            
+            prompt = "Here is the raw Facebook Ads account data with full conversion tracking:\n\n"
+            
+            # Add account-level summary
+            total_spend = sum(float(campaign.get('spend', 0)) for campaign in campaigns)
+            total_impressions = sum(int(campaign.get('impressions', 0)) for campaign in campaigns)
+            total_clicks = sum(int(campaign.get('clicks', 0)) for campaign in campaigns)
+            total_conversions = sum(int(campaign.get('conversions', 0)) for campaign in campaigns)
+            
+            # Calculate funnel metrics with safe division
+            ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+            conversion_rate = (total_conversions / total_clicks * 100) if total_clicks > 0 else 0
+            cpc = (total_spend / total_clicks) if total_clicks > 0 else 0
+            cpa = (total_spend / total_conversions) if total_conversions > 0 else 0
+            
+            prompt += f"""Account Overview and Conversion Funnel:
 Total Spend: ${total_spend:,.2f}
 Total Impressions: {total_impressions:,}
 Total Clicks: {total_clicks:,}
@@ -131,21 +134,22 @@ Purchase Conversion Rate: {conversion_rate:.2f}%
 Cost per Purchase: ${cpa:.2f}
 
 Campaign Performance (with conversion data):\n"""
-        
-        # Add campaign data with enhanced conversion metrics
-        for campaign in campaigns:
-            spend = float(campaign.get('spend', 0))
-            impressions = int(campaign.get('impressions', 0))
-            clicks = int(campaign.get('clicks', 0))
-            conversions = int(campaign.get('conversions', 0))
             
-            # Calculate campaign-specific metrics
-            campaign_ctr = (clicks / impressions * 100) if impressions > 0 else 0
-            campaign_cvr = (conversions / clicks * 100) if clicks > 0 else 0
-            campaign_cpc = spend / clicks if clicks > 0 else 0
-            campaign_cpa = spend / conversions if conversions > 0 else 0
-            
-            prompt += f"""
+            # Add campaign data with enhanced conversion metrics
+            for campaign in campaigns:
+                try:
+                    spend = float(campaign.get('spend', 0))
+                    impressions = int(campaign.get('impressions', 0))
+                    clicks = int(campaign.get('clicks', 0))
+                    conversions = int(campaign.get('conversions', 0))
+                    
+                    # Calculate campaign-specific metrics with safe division
+                    campaign_ctr = (clicks / impressions * 100) if impressions > 0 else 0
+                    campaign_cvr = (conversions / clicks * 100) if clicks > 0 else 0
+                    campaign_cpc = spend / clicks if clicks > 0 else 0
+                    campaign_cpa = spend / conversions if conversions > 0 else 0
+                    
+                    prompt += f"""
 Campaign: {campaign.get('name', 'Unnamed Campaign')}
 Status: {campaign.get('status', 'Unknown')}
 Objective: {campaign.get('objective', 'Unknown')}
@@ -167,25 +171,31 @@ Rankings:
 Quality Ranking: {campaign.get('quality_ranking', 'Unknown')}
 Engagement Ranking: {campaign.get('engagement_ranking', 'Unknown')}
 """
+                except Exception as e:
+                    logger.error(f"Error formatting campaign data: {str(e)}", exc_info=True)
+                    continue
 
-        # Add ad set data with conversion focus
-        if ad_sets:
-            prompt += "\nAd Set Performance (with conversion data):\n"
-            for ad_set in ad_sets:
-                spend = float(ad_set.get('spend', 0))
-                impressions = int(ad_set.get('impressions', 0))
-                clicks = int(ad_set.get('clicks', 0))
-                conversions = int(ad_set.get('conversions', 0))
-                
-                # Calculate ad set metrics
-                ad_set_ctr = (clicks / impressions * 100) if impressions > 0 else 0
-                ad_set_cvr = (conversions / clicks * 100) if clicks > 0 else 0
-                ad_set_cpc = spend / clicks if clicks > 0 else 0
-                ad_set_cpa = spend / conversions if conversions > 0 else 0
-                
-                prompt += f"""
+            # Add ad set data with conversion focus
+            if ad_sets:
+                prompt += "\nAd Set Performance (with conversion data):\n"
+                for ad_set in ad_sets:
+                    try:
+                        spend = float(ad_set.get('spend', 0))
+                        impressions = int(ad_set.get('impressions', 0))
+                        clicks = int(ad_set.get('clicks', 0))
+                        conversions = int(ad_set.get('conversions', 0))
+                        
+                        # Calculate ad set metrics with safe division
+                        ad_set_ctr = (clicks / impressions * 100) if impressions > 0 else 0
+                        ad_set_cvr = (conversions / clicks * 100) if clicks > 0 else 0
+                        ad_set_cpc = spend / clicks if clicks > 0 else 0
+                        ad_set_cpa = spend / conversions if conversions > 0 else 0
+                        
+                        campaign_name = campaign_lookup.get(ad_set.get('campaign_id'), 'Unknown')
+                        
+                        prompt += f"""
 Ad Set: {ad_set.get('name', 'Unnamed Ad Set')}
-Campaign: {next((c.get('name', 'Unknown') for c in campaigns if c.get('id') == ad_set.get('campaign_id')), 'Unknown')}
+Campaign: {campaign_name}
 Optimization Goal: {ad_set.get('optimization_goal', 'Unknown')}
 Daily Budget: ${float(ad_set.get('daily_budget', 0)):.2f}
 
@@ -199,26 +209,33 @@ CPC: ${ad_set_cpc:.2f}
 Purchase Conversion Rate: {ad_set_cvr:.2f}%
 Cost per Purchase: ${ad_set_cpa:.2f}
 """
+                    except Exception as e:
+                        logger.error(f"Error formatting ad set data: {str(e)}", exc_info=True)
+                        continue
 
-        # Add ad-level data with conversion focus
-        if ads:
-            prompt += "\nAd Performance (with conversion data):\n"
-            for ad in ads:
-                spend = float(ad.get('spend', 0))
-                impressions = int(ad.get('impressions', 0))
-                clicks = int(ad.get('clicks', 0))
-                conversions = int(ad.get('conversions', 0))
-                
-                # Calculate ad metrics
-                ad_ctr = (clicks / impressions * 100) if impressions > 0 else 0
-                ad_cvr = (conversions / clicks * 100) if clicks > 0 else 0
-                ad_cpc = spend / clicks if clicks > 0 else 0
-                ad_cpa = spend / conversions if conversions > 0 else 0
-                
-                prompt += f"""
+            # Add ad-level data with conversion focus
+            if ads:
+                prompt += "\nAd Performance (with conversion data):\n"
+                for ad in ads:
+                    try:
+                        spend = float(ad.get('spend', 0))
+                        impressions = int(ad.get('impressions', 0))
+                        clicks = int(ad.get('clicks', 0))
+                        conversions = int(ad.get('conversions', 0))
+                        
+                        # Calculate ad metrics with safe division
+                        ad_ctr = (clicks / impressions * 100) if impressions > 0 else 0
+                        ad_cvr = (conversions / clicks * 100) if clicks > 0 else 0
+                        ad_cpc = spend / clicks if clicks > 0 else 0
+                        ad_cpa = spend / conversions if conversions > 0 else 0
+                        
+                        campaign_name = campaign_lookup.get(ad.get('campaign_id'), 'Unknown')
+                        adset_name = adset_lookup.get(ad.get('adset_id'), 'Unknown')
+                        
+                        prompt += f"""
 Ad: {ad.get('name', 'Unnamed Ad')}
-Campaign: {next((c.get('name', 'Unknown') for c in campaigns if c.get('id') == ad.get('campaign_id')), 'Unknown')}
-Ad Set: {next((a.get('name', 'Unknown') for a in ad_sets if a.get('id') == ad.get('adset_id')), 'Unknown')}
+Campaign: {campaign_name}
+Ad Set: {adset_name}
 Status: {ad.get('status', 'Unknown')}
 
 Performance & Conversion Data:
@@ -235,83 +252,109 @@ Rankings:
 Quality Ranking: {ad.get('quality_ranking', 'Unknown')}
 Engagement Ranking: {ad.get('engagement_ranking', 'Unknown')}
 """
+                    except Exception as e:
+                        logger.error(f"Error formatting ad data: {str(e)}", exc_info=True)
+                        continue
 
-        prompt += "\nAnalyze this data focusing on the full conversion funnel from impressions to purchases. For each recommendation, include:\n"
-        prompt += "1. Current conversion metrics and performance\n"
-        prompt += "2. Specific opportunities for improvement\n"
-        prompt += "3. How to optimize for better conversion rates\n"
-        prompt += "4. Expected impact on ROAS and conversion metrics\n"
-        prompt += "\nFocus on identifying:\n"
-        prompt += "- Campaigns, ad sets, and ads with strong purchase performance\n"
-        prompt += "- Opportunities to improve conversion rates\n"
-        prompt += "- Budget optimization based on ROAS\n"
-        prompt += "- Creative and audience optimizations to drive more purchases\n"
-        prompt += "- Cost efficiency opportunities (CPC, CPA)\n"
-        prompt += "- Scaling opportunities for high-converting campaigns\n"
+            prompt += "\nAnalyze this data focusing on the full conversion funnel from impressions to purchases. For each recommendation, include:\n"
+            prompt += "1. Current conversion metrics and performance\n"
+            prompt += "2. Specific opportunities for improvement\n"
+            prompt += "3. How to optimize for better conversion rates\n"
+            prompt += "4. Expected impact on ROAS and conversion metrics\n"
+            prompt += "\nFocus on identifying:\n"
+            prompt += "- Campaigns, ad sets, and ads with strong purchase performance\n"
+            prompt += "- Opportunities to improve conversion rates\n"
+            prompt += "- Budget optimization based on ROAS\n"
+            prompt += "- Creative and audience optimizations to drive more purchases\n"
+            prompt += "- Cost efficiency opportunities (CPC, CPA)\n"
+            prompt += "- Scaling opportunities for high-converting campaigns\n"
 
-        return prompt
+            return prompt
+            
+        except Exception as e:
+            logger.error(f"Error in _format_ad_data: {str(e)}", exc_info=True)
+            return "Error formatting ad data for analysis"
 
     def analyze_account(self, account_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze Facebook ad account data using OpenAI's GPT model."""
+        """
+        Analyze Facebook ad account data using OpenAI's GPT models.
+        Returns a dictionary containing analysis results and recommendations.
+        """
         try:
-            logger.info("Starting OpenAI analysis of ad account data")
+            logger.info("Starting account analysis")
+            
+            # Validate input data
+            if not account_data:
+                logger.error("Empty account data received")
+                return {
+                    'success': False,
+                    'error': 'Empty account data received'
+                }
             
             # Format the data for analysis
-            formatted_data = self._format_ad_data(account_data)
+            try:
+                formatted_data = self._format_ad_data(account_data)
+                if formatted_data == "Error formatting ad data for analysis":
+                    return {
+                        'success': False,
+                        'error': 'Failed to format ad data for analysis'
+                    }
+            except Exception as e:
+                logger.error(f"Error formatting ad data: {str(e)}", exc_info=True)
+                return {
+                    'success': False,
+                    'error': f'Error formatting ad data: {str(e)}'
+                }
             
-            # Create the analysis prompt
-            prompt = self._create_analysis_prompt(formatted_data)
-            
-            # Make the API call with retry logic
-            max_retries = 3
-            retry_delay = 2
-            
-            for attempt in range(max_retries):
+            # Generate analysis using OpenAI
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4-turbo-preview",
+                    messages=[
+                        {"role": "system", "content": "You are an expert Facebook Ads analyst. Analyze the provided ad account data and generate actionable recommendations."},
+                        {"role": "user", "content": formatted_data}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                
+                if not response.choices:
+                    logger.error("No response choices received from OpenAI")
+                    return {
+                        'success': False,
+                        'error': 'No analysis generated'
+                    }
+                
+                analysis_text = response.choices[0].message.content
+                
+                # Parse the analysis into structured format
                 try:
-                    # Test connection before making the actual request
-                    try:
-                        self.client.models.list()
-                    except Exception as conn_error:
-                        logger.error(f"OpenAI API connection test failed: {str(conn_error)}")
-                        if attempt == max_retries - 1:
-                            return {
-                                'success': False,
-                                'error': 'Failed to connect to OpenAI API. Please check your internet connection and API key.'
-                            }
-                        time.sleep(retry_delay)
-                        continue
-                    
-                    response = self.client.chat.completions.create(
-                        model="gpt-4",
-                        messages=[
-                            {"role": "system", "content": "You are an expert digital marketing analyst specializing in Facebook Ads optimization."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.7,
-                        max_tokens=3000
-                    )
-                    
-                    # Process the response
-                    analysis = self._process_response(response)
-                    logger.info("Successfully completed OpenAI analysis")
-                    return analysis
-                    
+                    analysis_results = self._parse_analysis(analysis_text)
                 except Exception as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        logger.error(f"OpenAI API error after {max_retries} attempts: {str(e)}")
-                        return {
-                            'success': False,
-                            'error': f'OpenAI analysis failed: {str(e)}'
-                        }
-                    logger.warning(f"OpenAI API attempt {attempt + 1} failed, retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                    
+                    logger.error(f"Error parsing analysis results: {str(e)}", exc_info=True)
+                    return {
+                        'success': False,
+                        'error': f'Error parsing analysis results: {str(e)}'
+                    }
+                
+                return {
+                    'success': True,
+                    'analysis_results': analysis_results,
+                    'raw_analysis': analysis_text
+                }
+                
+            except Exception as e:
+                logger.error(f"OpenAI API error: {str(e)}", exc_info=True)
+                return {
+                    'success': False,
+                    'error': f'OpenAI API error: {str(e)}'
+                }
+                
         except Exception as e:
-            logger.error(f"Error in OpenAI analysis: {str(e)}")
+            logger.error(f"Unexpected error in analyze_account: {str(e)}", exc_info=True)
             return {
                 'success': False,
-                'error': f'OpenAI analysis failed: {str(e)}'
+                'error': f'Unexpected error: {str(e)}'
             }
 
     def _create_analysis_prompt(self, data: str) -> str:

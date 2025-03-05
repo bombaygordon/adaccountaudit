@@ -101,32 +101,41 @@ class AIAdAnalyzer:
     
     def _analyze_campaigns(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze campaign performance and identify issues."""
-        campaigns = data['campaigns']
-        if campaigns.empty:
+        campaigns = data.get('campaigns', [])
+        if not campaigns:
             return {}
-            
+        
         analysis = {
             'underperforming': [],
             'high_potential': [],
             'optimization_opportunities': []
         }
         
+        # Convert to DataFrame if it's a list of dictionaries
+        if isinstance(campaigns, list):
+            campaigns_df = pd.DataFrame(campaigns)
+        elif isinstance(campaigns, pd.DataFrame):
+            campaigns_df = campaigns
+        else:
+            self.logger.warning("Campaigns data is not in a supported format")
+            return analysis
+        
         # Identify underperforming campaigns
-        if 'ctr' in campaigns.columns:
-            underperforming = campaigns[campaigns['ctr'] < self.performance_thresholds['ctr']]
+        if 'ctr' in campaigns_df.columns:
+            underperforming = campaigns_df[campaigns_df['ctr'] < self.performance_thresholds['ctr']]
             analysis['underperforming'] = underperforming.to_dict('records')
         
         # Identify high-potential campaigns
-        if 'roas' in campaigns.columns:
-            high_potential = campaigns[campaigns['roas'] > self.performance_thresholds['roas']]
+        if 'roas' in campaigns_df.columns:
+            high_potential = campaigns_df[campaigns_df['roas'] > self.performance_thresholds['roas']]
             analysis['high_potential'] = high_potential.to_dict('records')
-            
+        
         return analysis
     
     def _analyze_audiences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze audience performance and saturation."""
-        ad_sets = data['ad_sets']
-        if ad_sets.empty:
+        ad_sets = data.get('ad_sets', [])
+        if not ad_sets:
             return {}
             
         analysis = {
@@ -135,30 +144,48 @@ class AIAdAnalyzer:
             'audience_size_issues': []
         }
         
+        # Convert to DataFrame if it's a list of dictionaries
+        if isinstance(ad_sets, list):
+            ad_sets_df = pd.DataFrame(ad_sets)
+        elif isinstance(ad_sets, pd.DataFrame):
+            ad_sets_df = ad_sets
+        else:
+            self.logger.warning("Ad sets data is not in a supported format")
+            return analysis
+        
         # Check for audience saturation
-        if 'frequency' in ad_sets.columns:
-            saturated = ad_sets[ad_sets['frequency'] > self.performance_thresholds['frequency']]
+        if 'frequency' in ad_sets_df.columns:
+            saturated = ad_sets_df[ad_sets_df['frequency'] > self.performance_thresholds['frequency']]
             analysis['saturated_audiences'] = saturated.to_dict('records')
             
         return analysis
     
     def _analyze_creatives(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze creative performance and identify winning/losing ads."""
-        ads = data['ads']
-        if ads.empty:
+        ads = data.get('ads', [])
+        if not ads:
             return {}
-            
+        
         analysis = {
             'top_performing_ads': [],
             'underperforming_ads': [],
             'creative_fatigue': []
         }
         
+        # Convert to DataFrame if it's a list of dictionaries
+        if isinstance(ads, list):
+            ads_df = pd.DataFrame(ads)
+        elif isinstance(ads, pd.DataFrame):
+            ads_df = ads
+        else:
+            self.logger.warning("Ads data is not in a supported format")
+            return analysis
+        
         # Identify top performing ads
-        if 'ctr' in ads.columns:
-            top_ads = ads.nlargest(5, 'ctr')
+        if 'ctr' in ads_df.columns:
+            top_ads = ads_df.nlargest(5, 'ctr')
             analysis['top_performing_ads'] = top_ads.to_dict('records')
-            
+        
         return analysis
     
     def _analyze_budget_allocation(self, data: Dict[str, Any]) -> Dict[str, Any]:

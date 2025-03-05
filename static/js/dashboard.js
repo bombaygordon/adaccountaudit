@@ -1,6 +1,35 @@
 // Add this at the top of the file
 let mainContentElement = null;
 
+// Helper function to check if we're on a specific page
+function isPageWithId(elementId) {
+    return document.getElementById(elementId) !== null;
+}
+
+// Function to check if we're on the dashboard page
+function isDashboardPage() {
+    // Check for elements that only exist on the dashboard
+    return isPageWithId('recommendationsContainer') || 
+           isPageWithId('platformsAudited') ||
+           document.querySelector('.dashboard-content') !== null;
+}
+
+// Improved version of getElement that doesn't log warnings on certain pages
+function getElement(id, logWarning = true) {
+    const element = document.getElementById(id);
+    if (!element && logWarning) {
+        // Only log warnings if we're on a page where the element should exist
+        if (
+            (id === 'runAuditBtn' && isDashboardPage()) ||
+            (id === 'errorAlert' && isDashboardPage()) ||
+            (id === 'loadingIndicator' && isDashboardPage())
+        ) {
+            console.warn(`Element with id "${id}" not found in the DOM`);
+        }
+    }
+    return element;
+}
+
 // Function to ensure main content container exists
 function ensureMainContent() {
     if (!mainContentElement) {
@@ -24,21 +53,88 @@ function ensureMainContent() {
     return mainContentElement;
 }
 
-// Check if data has the enhanced structure and extract the correct data
+// Update showError function
+function showError(message) {
+    let errorDiv = getElement('errorAlert', false);
+    
+    if (!errorDiv && isDashboardPage()) {
+        // If we're on dashboard page but the error div doesn't exist, create it
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'errorAlert';
+        errorDiv.className = 'alert alert-danger';
+        
+        // Find a good place to insert it
+        const container = document.querySelector('.container') || document.body;
+        container.insertBefore(errorDiv, container.firstChild);
+    }
+    
+    if (errorDiv) {
+        errorDiv.innerHTML = message;
+        errorDiv.style.display = 'block';
+    } else {
+        // If we can't show an error on the page, at least log it
+        console.error("Error:", message);
+    }
+}
+
+function hideError() {
+    const errorDiv = getElement('errorAlert', false);
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+}
+
+function showLoadingState() {
+    hideError(); // Hide any existing errors
+    
+    let loadingDiv = getElement('loadingIndicator', false);
+    
+    if (!loadingDiv && isDashboardPage()) {
+        // Create loading indicator if we're on dashboard page
+        loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loadingIndicator';
+        loadingDiv.className = 'text-center mt-3';
+        loadingDiv.innerHTML = `
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading data...</p>
+        `;
+        
+        // Find a good place to insert it
+        const container = document.querySelector('.container') || document.body;
+        container.insertBefore(loadingDiv, container.firstChild);
+    }
+    
+    if (loadingDiv) {
+        loadingDiv.style.display = 'block';
+    }
+}
+
+function hideLoadingState() {
+    const loadingDiv = getElement('loadingIndicator', false);
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+    }
+}
+
+// Modified extractAnalysisData function to better handle the response structure
 function extractAnalysisData(data) {
     console.log("Extracting analysis data from:", data);
     
-    // Check if this is the enhanced structure
+    // First, check if it's wrapped in a results object
+    if (data.results) {
+        data = data.results;
+    }
+    
+    // Now, check for the different possible data structures
     if (data.analysis_results) {
         return data.analysis_results;
-    } else if (data.results && data.results.analysis_results) {
-        return data.results.analysis_results;
-    } else if (data.prioritized_recommendations || data.recommendations) {
-        // If we have recommendations directly at the top level
-        return data;
+    } else if (data.recommendations || data.prioritized_recommendations) {
+        return data; // This is already the analysis data
     } else {
-        // Fall back to the original structure
-        return data.results || data;
+        // Last resort, return the data as is
+        return data;
     }
 }
 
@@ -48,14 +144,14 @@ async function fetchAuditData() {
         console.log("Starting fetchAuditData function");
         
         // Get Facebook credentials from session storage
-        const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
+        const fbCredentials = getSafeCredentials();
         console.log("Retrieved credentials:", {
-            hasAccessToken: !!fbCredentials.access_token,
-            hasAccountId: !!fbCredentials.account_id,
-            accountId: fbCredentials.account_id
+            hasAccessToken: !!fbCredentials?.access_token,
+            hasAccountId: !!fbCredentials?.account_id,
+            accountId: fbCredentials?.account_id
         });
         
-        if (!fbCredentials.access_token || !fbCredentials.account_id) {
+        if (!fbCredentials) {
             console.error("Facebook credentials not found");
             showError("Facebook credentials not found. Please reconnect your account.");
             return;
@@ -65,19 +161,19 @@ async function fetchAuditData() {
         showLoadingState();
         hideError(); // Hide any existing errors
         
-        // Fetch data for the connected account
-        const response = await fetch('/api/audit/facebook', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                access_token: fbCredentials.access_token,
-                account_id: fbCredentials.account_id,
-                days_lookback: 30
-            })
-        });
-        
+            // Fetch data for the connected account
+            const response = await fetch('/api/audit/facebook', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                accessToken: fbCredentials.access_token,
+                accountId: fbCredentials.account_id,
+                    days_lookback: 30
+                })
+            });
+            
         console.log("API Response status:", response.status);
         
         if (!response.ok) {
@@ -109,7 +205,7 @@ async function fetchAuditData() {
         console.log("Extracted data for dashboard:", data);
         
         // Update the dashboard with the data
-        updateDashboard(data);
+            updateDashboard(data);
         
         // Store the latest audit results
         sessionStorage.setItem('latest_audit', JSON.stringify(result));
@@ -155,9 +251,9 @@ function processFacebookAuditResponse(result) {
     }
 }
 
-// Function to update the dashboard with audit data
+// Modified updateDashboard function to handle the data structure
 function updateDashboard(data) {
-    console.log('Raw dashboard data:', data);
+    console.log("Updating dashboard with data:", data);
     
     if (!data || typeof data !== 'object') {
         console.error('Invalid data received:', data);
@@ -165,52 +261,56 @@ function updateDashboard(data) {
         return;
     }
     
-    // Ensure all necessary containers exist
-    ensureChartContainers();
-    
-    // Extract analysis results
-    const analysisResults = data.analysis_results || {};
-    console.log('Analysis results:', analysisResults);
-    
-    // Update recommendations
-    const recommendations = analysisResults.recommendations || [];
-    console.log('Updating recommendations:', recommendations);
-    updateRecommendations(recommendations);
+    // Update recommendations section
+    if (data.recommendations || data.prioritized_recommendations) {
+        const recommendations = data.recommendations || data.prioritized_recommendations || [];
+        updateRecommendations(recommendations);
+    }
     
     // Update metrics
-    const metrics = {
-        totalSpend: analysisResults.account_overview?.total_spend || 0,
-        ctr: analysisResults.metrics?.average_ctr || 0,
-        cpc: analysisResults.metrics?.average_cpc || 0,
-        cpm: analysisResults.metrics?.average_cpm || 0,
-        conversionRate: analysisResults.metrics?.average_conversion_rate || 0,
-        roas: analysisResults.metrics?.roas || 0
-    };
-    console.log('Updating metrics with:', metrics);
-    updateMetrics(metrics);
-    
-    // Update account overview charts
-    if (analysisResults.account_overview) {
-        console.log('Updating charts with:', analysisResults.account_overview);
-        // Ensure chart containers exist again before updating charts
-        ensureChartContainers();
-        updateCharts(analysisResults.account_overview);
+    if (data.metrics || data.account_overview) {
+        const metrics = data.metrics || {};
+        const accountOverview = data.account_overview || {};
+        
+        // Combine the data
+        const combinedMetrics = {
+            totalSpend: accountOverview.total_spend || metrics.total_spend || 0,
+            totalImpressions: accountOverview.total_impressions || metrics.total_impressions || 0,
+            totalClicks: accountOverview.total_clicks || metrics.total_clicks || 0,
+            totalConversions: accountOverview.total_conversions || metrics.total_conversions || 0,
+            ctr: accountOverview.ctr || metrics.ctr || 0,
+            cpc: accountOverview.cpc || metrics.cpc || 0,
+            cpa: accountOverview.cpa || metrics.cpa || 0,
+            conversionRate: accountOverview.conversion_rate || metrics.conversion_rate || 0,
+            roas: accountOverview.roas || metrics.roas || 0
+        };
+        
+        updateMetrics(combinedMetrics);
     }
     
-    // Update summary stats
+    // Update potential savings
+    const potentialSavings = getElement('potentialSavings', false);
+    if (potentialSavings) {
+        potentialSavings.textContent = formatCurrency(data.potential_savings || 0);
+    }
+    
+    // Update potential improvement percentage
+    const potentialImprovement = getElement('potentialImprovement', false);
+    if (potentialImprovement) {
+        potentialImprovement.textContent = formatPercentage(data.potential_improvement_percentage || 0);
+    }
+    
+    // Initialize or update charts
+    if (data.account_overview) {
+        try {
+            initCharts(data);
+        } catch (e) {
+            console.warn("Error initializing charts:", e);
+        }
+    }
+    
+    // Update summary metrics
     updateSummaryMetrics(data);
-    
-    // Update potential savings and improvement percentage
-    const potentialSavingsElement = document.getElementById('potentialSavings');
-    const improvementPercentageElement = document.getElementById('improvementPercentage');
-    
-    if (potentialSavingsElement) {
-        potentialSavingsElement.textContent = formatCurrency(data.potential_savings || 0);
-    }
-    
-    if (improvementPercentageElement) {
-        improvementPercentageElement.textContent = formatPercentage(data.potential_improvement_percentage || 0);
-    }
 }
 
 // Function to update metrics section
@@ -241,49 +341,64 @@ function updateMetrics(metrics) {
     });
 }
 
-// Function to update connection status indicators
-function updateConnectionStatus() {
-    // Update Facebook connection status
-    const fbConnectionStatus = document.getElementById('fbConnectionStatus');
-    const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
+// Updated function to handle connection status
+function updateConnectionStatus(isConnected) {
+    if (!isDashboardPage()) {
+        return; // Don't update connection status on non-dashboard pages
+    }
     
-    console.log("Checking Facebook credentials in updateConnectionStatus:", fbCredentials);
+    const runAuditBtn = getElement('runAuditBtn', false);
+    const connectFbLink = getElement('connectFbLink', false);
+    const fbConnectionStatus = getElement('fbConnectionStatus', false);
     
-    if (fbConnectionStatus && fbCredentials.access_token && fbCredentials.account_id) {
-        fbConnectionStatus.textContent = `Connected (Account ID: ${fbCredentials.account_id})`;
+    if (isConnected) {
+        // Get stored credentials
+        const fbCredentials = getSafeCredentials();
+        const hasAccessToken = !!fbCredentials?.access_token;
+        const hasAccountId = !!fbCredentials?.account_id;
+        
+        console.log('Connection status:', { hasAccessToken, hasAccountId, accountId: fbCredentials?.account_id });
+        
+        if (hasAccessToken && hasAccountId) {
+            if (runAuditBtn) {
+                runAuditBtn.disabled = false;
+                runAuditBtn.title = 'Run Facebook Ads Audit';
+            }
+            
+            if (connectFbLink) {
+                connectFbLink.textContent = 'Re-connect Facebook';
+                connectFbLink.classList.remove('btn-primary');
+                connectFbLink.classList.add('btn-outline-secondary');
+            }
+            
+            if (fbConnectionStatus) {
+                fbConnectionStatus.textContent = `Connected (Account ID: ${fbCredentials.account_id})`;
         fbConnectionStatus.classList.add('text-success');
-        
-        // Update the connect button to show "Re-connect" instead
-        const fbConnectBtn = document.querySelector('.card-body a[href*="connect_facebook"]');
-        if (fbConnectBtn) {
-            fbConnectBtn.textContent = 'Re-connect';
-            fbConnectBtn.classList.remove('btn-outline-primary');
-            fbConnectBtn.classList.add('btn-outline-secondary');
-        }
-        
-        // Since we have valid credentials, trigger data fetch
-        fetchAuditData().catch(error => {
-            console.error('Error fetching audit data:', error);
-            showError('Failed to fetch audit data. Please try again.');
-        });
-    } else {
-        if (fbConnectionStatus) {
-            fbConnectionStatus.textContent = 'Not connected';
-            fbConnectionStatus.classList.remove('text-success');
-            fbConnectionStatus.classList.add('text-warning');
-        }
-        
-        // Show connection warning
-        showError('Facebook credentials not found. Please connect your account.');
-        
-        // Update connect button to primary state
-        const fbConnectBtn = document.querySelector('.card-body a[href*="connect_facebook"]');
-        if (fbConnectBtn) {
-            fbConnectBtn.textContent = 'Connect Account';
-            fbConnectBtn.classList.remove('btn-outline-secondary');
-            fbConnectBtn.classList.add('btn-outline-primary');
+            }
+            
+            hideError();
+            return true;
         }
     }
+    
+    // Not connected
+    if (runAuditBtn) {
+        runAuditBtn.disabled = true;
+        runAuditBtn.title = 'Please connect your Facebook account first';
+    }
+    
+    if (connectFbLink) {
+        connectFbLink.textContent = 'Connect Facebook Account';
+        connectFbLink.classList.remove('btn-outline-secondary');
+        connectFbLink.classList.add('btn-primary');
+    }
+    
+    if (fbConnectionStatus) {
+        fbConnectionStatus.textContent = 'Not connected';
+        fbConnectionStatus.classList.remove('text-success');
+    }
+    
+    return false;
 }
 
 // Updated updateSummaryMetrics function
@@ -428,13 +543,13 @@ function updateRecommendations(recommendations) {
         `;
         return;
     }
-
-    let html = '';
+    
+        let html = '';
     recommendations.forEach(rec => {
         const severityClass = getSeverityClass(rec.severity);
         const severityBadge = getSeverityBadge(rec.severity);
-        
-        html += `
+            
+            html += `
             <div class="card mb-3 ${severityClass}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -452,11 +567,11 @@ function updateRecommendations(recommendations) {
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
-    });
-
-    recommendationsList.innerHTML = html;
+                </div>
+            `;
+        });
+        
+        recommendationsList.innerHTML = html;
 }
 
 // Helper function to get severity class
@@ -783,184 +898,192 @@ function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
-// Function to handle API errors
+// Improved error handling function
 function handleApiError(error) {
     console.error('API Error:', error);
     
+    // Default error message
     let errorMessage = 'An error occurred while processing your request.';
+    let errorType = 'unknown';
+    let shouldRetry = false;
+    let shouldReconnect = false;
     
-    if (error.message) {
-        if (error.message.includes('OpenAI API key not configured')) {
-            errorMessage = 'The OpenAI API key is not configured. Please contact support.';
-        } else if (error.message.includes('Failed to initialize OpenAI analyzer')) {
-            errorMessage = 'The OpenAI API key is invalid. Please check your API key configuration.';
-        } else if (error.message.includes('OpenAI analysis failed')) {
-            errorMessage = 'The analysis service encountered an error. Please try again later.';
-        } else if (error.message.includes('Invalid OAuth access token')) {
-            errorMessage = 'Your Facebook connection has expired. Please reconnect your account.';
-        } else if (error.message.includes('User request limit reached')) {
-            errorMessage = 'Facebook API rate limit reached. Please try again in a few minutes.';
-        } else if (error.message.includes('HTTP error! status: 503')) {
-            errorMessage = 'The analysis service is temporarily unavailable. Please try again in a few minutes.';
-        } else if (error.message.includes('HTTP error! status: 500')) {
-            errorMessage = 'Server error occurred. Please try again later.';
-        } else if (error.message.includes('HTTP error! status: 404')) {
-            errorMessage = 'Resource not found. Please check your account ID.';
-        } else {
+    // Helper function to determine if error is a network error
+    const isNetworkError = (err) => {
+        return err instanceof TypeError && 
+               (err.message.includes('Failed to fetch') || 
+                err.message.includes('NetworkError') ||
+                err.message.includes('Network request failed'));
+    };
+    
+    // Helper function to determine if error is a timeout
+    const isTimeoutError = (err) => {
+        return err.message.includes('timeout') || 
+               err.message.includes('Request timed out') ||
+               err.message.includes('AbortError');
+    };
+    
+    // Helper function to determine if error is a rate limit
+    const isRateLimitError = (err) => {
+        return err.message.includes('rate limit') || 
+               err.message.includes('User request limit reached') ||
+               err.message.includes('Too Many Requests') ||
+               err.message.includes('429');
+    };
+    
+    // Helper function to determine if error is an authentication error
+    const isAuthError = (err) => {
+        return err.message.includes('Invalid OAuth access token') ||
+               err.message.includes('Unauthorized') ||
+               err.message.includes('401') ||
+               err.message.includes('authentication failed');
+    };
+    
+    // Helper function to determine if error is a server error
+    const isServerError = (err) => {
+        return err.message.includes('500') ||
+               err.message.includes('Internal Server Error') ||
+               err.message.includes('Service Unavailable') ||
+               err.message.includes('503');
+    };
+    
+    // Helper function to determine if error is a resource not found error
+    const isNotFoundError = (err) => {
+        return err.message.includes('404') ||
+               err.message.includes('Not Found') ||
+               err.message.includes('Resource not found');
+    };
+    
+    // Helper function to determine if error is a validation error
+    const isValidationError = (err) => {
+        return err.message.includes('400') ||
+               err.message.includes('Bad Request') ||
+               err.message.includes('validation failed') ||
+               err.message.includes('invalid input');
+    };
+    
+    // Helper function to determine if error is an OpenAI-specific error
+    const isOpenAIError = (err) => {
+        return err.message.includes('OpenAI') ||
+               err.message.includes('GPT') ||
+               err.message.includes('model');
+    };
+    
+    // Helper function to determine if error is a Facebook-specific error
+    const isFacebookError = (err) => {
+        return err.message.includes('Facebook') ||
+               err.message.includes('OAuth') ||
+               err.message.includes('access token');
+    };
+    
+    if (error) {
+        // Network errors
+        if (isNetworkError(error)) {
+            errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+            errorType = 'network';
+            shouldRetry = true;
+        }
+        // Timeout errors
+        else if (isTimeoutError(error)) {
+            errorMessage = 'The request took too long to complete. Please try again.';
+            errorType = 'timeout';
+            shouldRetry = true;
+        }
+        // Rate limit errors
+        else if (isRateLimitError(error)) {
+            errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
+            errorType = 'rate_limit';
+            shouldRetry = true;
+        }
+        // Authentication errors
+        else if (isAuthError(error)) {
+            errorMessage = 'Your session has expired. Please reconnect your Facebook account.';
+            errorType = 'auth';
+            shouldReconnect = true;
+        }
+        // Server errors
+        else if (isServerError(error)) {
+            errorMessage = 'The server is experiencing issues. Please try again in a few minutes.';
+            errorType = 'server';
+            shouldRetry = true;
+        }
+        // Resource not found errors
+        else if (isNotFoundError(error)) {
+            errorMessage = 'The requested resource could not be found. Please check your account ID and try again.';
+            errorType = 'not_found';
+        }
+        // Validation errors
+        else if (isValidationError(error)) {
+            errorMessage = 'Invalid input provided. Please check your settings and try again.';
+            errorType = 'validation';
+        }
+        // OpenAI-specific errors
+        else if (isOpenAIError(error)) {
+            if (error.message.includes('API key not configured')) {
+                errorMessage = 'The OpenAI API key is not configured. Please contact support.';
+            } else if (error.message.includes('API key is invalid')) {
+                errorMessage = 'The OpenAI API key is invalid. Please check your API key configuration.';
+            } else if (error.message.includes('analysis failed')) {
+                errorMessage = 'The analysis service encountered an error. Please try again later.';
+            } else {
+                errorMessage = 'An error occurred with the analysis service. Please try again later.';
+            }
+            errorType = 'openai';
+        }
+        // Facebook-specific errors
+        else if (isFacebookError(error)) {
+            if (error.message.includes('Invalid OAuth access token')) {
+                errorMessage = 'Your Facebook connection has expired. Please reconnect your account.';
+                shouldReconnect = true;
+            } else if (error.message.includes('permissions')) {
+                errorMessage = 'Insufficient permissions to access Facebook data. Please reconnect with the required permissions.';
+                shouldReconnect = true;
+            } else {
+                errorMessage = 'An error occurred while accessing Facebook data. Please try again.';
+            }
+            errorType = 'facebook';
+        }
+        // Fallback to error message if available
+        else if (error.message) {
             errorMessage = error.message;
         }
     }
     
-    showError(errorMessage);
-}
-
-// Updated error handling functions
-function showError(message) {
-    ensureMainContent();
-    const errorDiv = document.getElementById('errorAlert') || createErrorDiv();
-    errorDiv.innerHTML = `
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    errorDiv.style.display = 'block';
-}
-
-function createErrorDiv() {
-    const mainContent = ensureMainContent();
-    let errorDiv = document.getElementById('errorAlert');
-    if (!errorDiv) {
-        errorDiv = document.createElement('div');
-        errorDiv.id = 'errorAlert';
-        mainContent.insertBefore(errorDiv, mainContent.firstChild);
-    }
-    return errorDiv;
-}
-
-function hideError() {
-    const errorDiv = document.getElementById('errorAlert');
-    if (errorDiv) {
-        errorDiv.style.display = 'none';
-    }
-}
-
-// Updated loading state functions
-function showLoadingState() {
-    ensureMainContent();
-    hideError();
-    const loadingDiv = document.getElementById('loadingIndicator') || createLoadingDiv();
-    loadingDiv.style.display = 'block';
-}
-
-function createLoadingDiv() {
-    const mainContent = ensureMainContent();
-    let loadingDiv = document.getElementById('loadingIndicator');
-    if (!loadingDiv) {
-        loadingDiv = document.createElement('div');
-        loadingDiv.id = 'loadingIndicator';
-        loadingDiv.className = 'text-center mt-3';
-        loadingDiv.innerHTML = `
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Loading data...</p>
-        `;
-        mainContent.insertBefore(loadingDiv, mainContent.firstChild);
-    }
-    return loadingDiv;
-}
-
-function hideLoadingState() {
-    const loadingDiv = document.getElementById('loadingIndicator');
-    if (loadingDiv) {
-        loadingDiv.style.display = 'none';
-    }
-}
-
-// Function to check Facebook connection status
-function checkFacebookConnection() {
-    const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
-    
-    // Log the actual credential values for debugging
-    console.log("Raw Facebook credentials:", fbCredentials);
-    console.log("Checking Facebook credentials:", {
-        hasAccessToken: !!fbCredentials.access_token,
-        hasAccountId: !!fbCredentials.account_id,
-        accountId: fbCredentials.account_id
+    // Log the categorized error
+    console.error('Categorized API Error:', {
+        type: errorType,
+        message: errorMessage,
+        shouldRetry,
+        shouldReconnect,
+        originalError: error
     });
-
-    const connectionStatus = document.getElementById('connectionStatus');
-    const runAuditBtn = document.getElementById('runAuditBtn');
-
-    if (fbCredentials && fbCredentials.access_token && fbCredentials.account_id) {
-        // Update connection status to show success
-        if (connectionStatus) {
-            connectionStatus.className = 'alert alert-success';
-            connectionStatus.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>Connected to Facebook Ads</strong>
-                        <br>
-                        <small>Account ID: ${fbCredentials.account_id}</small>
-                    </div>
-                    <a href="/connect/facebook" class="btn btn-outline-success btn-sm">Re-connect</a>
-                </div>
-            `;
-        }
+    
+    // Show the error message
+    showError(errorMessage);
+    
+    // Handle reconnection if needed
+    if (shouldReconnect) {
+        // Clear invalid credentials
+        sessionStorage.removeItem('fb_credentials');
+        sessionStorage.removeItem('facebook_response');
         
-        // Enable the run audit button and trigger data fetch
-        if (runAuditBtn) {
-            runAuditBtn.disabled = false;
-            
-            // Add click event listener if not already added
-            if (!runAuditBtn.hasAttribute('data-listener-added')) {
-                runAuditBtn.addEventListener('click', async () => {
-                    try {
-                        showLoadingState();
-                        await fetchAuditData();
-                        hideLoadingState();
-                    } catch (error) {
-                        console.error('Error during audit:', error);
-                        showError(error.message || 'An error occurred while running the audit');
-                        hideLoadingState();
-                    }
-                });
-                runAuditBtn.setAttribute('data-listener-added', 'true');
-            }
-        }
-        
-        // Automatically fetch data if we have credentials
-        fetchAuditData().catch(error => {
-            console.error('Error fetching initial audit data:', error);
-            showError('Failed to fetch audit data. Please try again.');
-        });
-    } else {
-        // Update connection status to show warning
-        if (connectionStatus) {
-            connectionStatus.className = 'alert alert-warning';
-            connectionStatus.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>Not connected to Facebook Ads</strong>
-                        <br>
-                        <small>Please connect your account to run an audit</small>
-                    </div>
-                    <a href="/connect/facebook" class="btn btn-primary btn-sm">Connect Account</a>
-                </div>
-            `;
-        }
-        
-        // Disable the run audit button
-        if (runAuditBtn) {
-            runAuditBtn.disabled = true;
-        }
-        
-        showError('Facebook credentials not found. Please connect your account.');
+        // Redirect to Facebook connection page after a short delay
+        setTimeout(() => {
+            window.location.href = '/connect/facebook';
+        }, 3000);
     }
+    
+    // Return error details for potential retry logic
+    return {
+        type: errorType,
+        message: errorMessage,
+        shouldRetry,
+        shouldReconnect,
+        originalError: error
+    };
 }
 
-// Add this function at the top of the file
+// Updated initializeFacebookCredentials function
 async function initializeFacebookCredentials() {
     try {
         // Check if we're returning from Facebook OAuth
@@ -1024,85 +1147,121 @@ async function initializeFacebookCredentials() {
     }
 }
 
-function updateConnectionStatus(isConnected) {
-    const runAuditBtn = document.getElementById('runAuditBtn');
-    const connectFbLink = document.getElementById('connectFbLink');
-    
-    if (isConnected) {
-        // Get stored credentials
-        const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
-        const hasAccessToken = !!fbCredentials.access_token;
-        const hasAccountId = !!fbCredentials.account_id;
+// Updated getSafeCredentials function
+function getSafeCredentials() {
+    try {
+        const credString = sessionStorage.getItem('fb_credentials');
+        if (!credString) return null;
         
-        console.log('Connection status:', { hasAccessToken, hasAccountId });
+        const creds = JSON.parse(credString);
+        if (!creds.access_token || !creds.account_id) return null;
         
-        if (hasAccessToken && hasAccountId) {
-            if (runAuditBtn) {
-                runAuditBtn.disabled = false;
-                runAuditBtn.title = 'Run Facebook Ads Audit';
-            }
-            if (connectFbLink) {
-                connectFbLink.textContent = 'Reconnect Facebook Account';
-                connectFbLink.classList.remove('btn-primary');
-                connectFbLink.classList.add('btn-outline-secondary');
-            }
-            hideError();
-            return true;
-        }
+        return {
+            access_token: creds.access_token,
+            account_id: creds.account_id
+        };
+    } catch (e) {
+        console.error('Error parsing stored credentials:', e);
+        return null;
+    }
+}
+
+// Updated checkFacebookConnection function
+function checkFacebookConnection() {
+    const fbCredentials = getSafeCredentials();
+    console.log('Checking Facebook credentials:', {
+        hasAccessToken: !!fbCredentials?.access_token,
+        hasAccountId: !!fbCredentials?.account_id,
+        accountId: fbCredentials?.account_id
+    });
+    
+    return !!fbCredentials;
+}
+
+// Function to initialize charts
+function initializeCharts() {
+    console.log("Initializing charts");
+    
+    // Ensure chart containers exist
+    ensureChartContainers();
+    
+    // Initialize performance gauge with default value
+    const gaugeCanvas = document.getElementById('performanceGauge');
+    if (gaugeCanvas) {
+        initPerformanceGauge(0);
     }
     
-    // Not connected or missing credentials
-    if (runAuditBtn) {
-        runAuditBtn.disabled = true;
-        runAuditBtn.title = 'Please connect your Facebook account first';
+    // Initialize campaign chart with empty data
+    const campaignCanvas = document.getElementById('campaignChart');
+    if (campaignCanvas) {
+        initCampaignChart({
+            total_campaigns: 0,
+            total_spend: 0
+        });
     }
-    if (connectFbLink) {
-        connectFbLink.textContent = 'Connect Facebook Account';
-        connectFbLink.classList.remove('btn-outline-secondary');
-        connectFbLink.classList.add('btn-primary');
-    }
-    return false;
 }
 
 // Update the DOMContentLoaded event listener
 document.addEventListener('DOMContentLoaded', async function() {
     console.log("DOM fully loaded");
     
-    // Ensure main content exists
-    ensureMainContent();
-    
-    // Initialize Facebook credentials if needed
-    await initializeFacebookCredentials();
+    try {
+        // Initialize Facebook credentials if needed
+        await initializeFacebookCredentials();
+        
+        // If we're on the dashboard page, initialize dashboard-specific elements
+        if (isDashboardPage()) {
+            console.log("Dashboard page detected, initializing dashboard components");
     
     // Update client dropdown if it exists
+            if (document.getElementById('clientSelect')) {
     updateClientDropdown();
+            }
+            
+            // Check Facebook connection
+            checkFacebookConnection();
+            
+            // Initialize charts if they exist
+            initializeCharts();
+            
+            // Then fetch audit data if connected
+            const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
+            if (fbCredentials.access_token && fbCredentials.account_id) {
+                console.log("Facebook credentials found, fetching audit data");
+    fetchAuditData();
+            }
+        } else {
+            console.log("Not on dashboard page, skipping dashboard initialization");
+        }
     
-    // Check Facebook connection
-    checkFacebookConnection();
-    
-    // Then fetch audit data if connected
-    const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
-    if (fbCredentials.access_token && fbCredentials.account_id) {
-        fetchAuditData();
-    }
-    
-    // Add event listeners for time filter dropdowns
+        // These event listeners can be added on any page
     document.querySelectorAll('.time-filter').forEach(item => {
+            if (item) {
         item.addEventListener('click', function(e) {
             e.preventDefault();
             const period = this.getAttribute('data-period');
-            if (period) {
-                document.getElementById('selectedPeriod').textContent = `Last ${period} Days`;
+                    const selectedPeriod = document.getElementById('selectedPeriod');
+                    if (period && selectedPeriod) {
+                        selectedPeriod.textContent = `Last ${period} Days`;
+                        console.log(`Time filter updated to ${period} days`);
+                    }
+                });
             }
-        });
     });
     
     // Add event listener for export button
     const exportBtn = document.getElementById('exportBtn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', function() {
+            exportBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log("Export button clicked");
             generateReport();
         });
+        }
+        
+    } catch (error) {
+        console.error("Error during initialization:", error);
+        showError("An error occurred while initializing the dashboard. Please refresh the page.");
     }
 });
 

@@ -404,7 +404,7 @@ class EnhancedReportGenerator:
     
     def _render_template(self, template_name, data):
         """
-        Render HTML template with the provided data.
+        Render the HTML template with the provided data.
         
         Args:
             template_name (str): Name of the template file
@@ -413,101 +413,116 @@ class EnhancedReportGenerator:
         Returns:
             str: Rendered HTML content
         """
-        # Set up template environment
-        env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader('reporting/templates'),
-            autoescape=jinja2.select_autoescape(['html', 'xml'])
-        )
-        
-        # Add custom filters
-        env.filters['currency'] = lambda value: f"${float(value):,.2f}"
-        env.filters['number'] = lambda value: f"{float(value):,}"
-        env.filters['percentage'] = lambda value: f"{float(value):.2f}%"
-        
         try:
+            # Set up Jinja2 environment
+            template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+            env = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(template_dir),
+                autoescape=True
+            )
+            
+            # Add custom filters
+            env.filters['format_currency'] = lambda x: f"${x:,.2f}"
+            env.filters['format_percentage'] = lambda x: f"{x:.2f}%"
+            env.filters['format_number'] = lambda x: f"{x:,}"
+            
             # Load template
             template = env.get_template(template_name)
             
-            # Fix items before rendering
+            # Fix problematic data before rendering
             if 'categorized_recommendations' in data:
-                # Convert items to list before slicing to avoid TypeError
                 for category in data['categorized_recommendations'].values():
                     if 'items' in category and not isinstance(category['items'], list):
                         category['items'] = list(category['items'])
             
+            # Ensure all required data is present
+            required_fields = ['client_name', 'agency_name', 'report_date', 'platform']
+            for field in required_fields:
+                if field not in data:
+                    data[field] = 'N/A'
+            
             # Render template with data
             return template.render(**data)
-        except jinja2.exceptions.TemplateNotFound:
-            self.logger.error(f"Template '{template_name}' not found")
             
-            # Use a basic fallback template
-            fallback_html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Ad Account Audit Report</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 40px; }
-                    h1 { color: #ff6b35; }
-                </style>
-            </head>
-            <body>
-                <h1>Ad Account Audit Report</h1>
-                <h2>{{ client_name }}</h2>
-                <p>Report Date: {{ report_date }}</p>
-                <h3>Summary</h3>
-                <p>Potential Savings: {{ potential_savings }}</p>
-                <p>Improvement Percentage: {{ improvement_percentage }}</p>
-            </body>
-            </html>
-            """
-            fallback_template = jinja2.Template(fallback_html)
-            return fallback_template.render(**data)
+        except jinja2.exceptions.TemplateNotFound:
+            self.logger.error(f"Template '{template_name}' not found in {template_dir}")
+            raise FileNotFoundError(f"Template '{template_name}' not found in {template_dir}")
+        except jinja2.exceptions.TemplateSyntaxError as e:
+            self.logger.error(f"Template syntax error in '{template_name}': {str(e)}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error rendering template '{template_name}': {str(e)}")
+            raise
     
     def _generate_pdf(self, html_content, filename=None, client_name="Client"):
         """
-        Generate PDF from HTML content.
+        Generate PDF from HTML content using pdfkit.
         
         Args:
-            html_content (str): HTML content to convert to PDF
+            html_content (str): HTML content to convert
             filename (str, optional): Custom filename for the PDF
-            client_name (str): Client name for the default filename
+            client_name (str): Name of the client
             
         Returns:
-            str: Path to the generated PDF file
+            str: Path to the generated PDF
         """
-        # Generate filename if not provided
-        if not filename:
-            sanitized_name = client_name.replace(' ', '_').lower()
-            date_str = datetime.now().strftime('%Y%m%d')
-            filename = f"{sanitized_name}_audit_report_{date_str}.pdf"
-        
-        # Ensure filename has .pdf extension
-        if not filename.endswith('.pdf'):
-            filename += '.pdf'
-        
-        # Define output path
-        output_path = os.path.join(self.report_dir, filename)
-        
-        # Configure PDF options
-        options = {
-            'page-size': 'Letter',
-            'margin-top': '0.75in',
-            'margin-right': '0.75in',
-            'margin-bottom': '0.75in',
-            'margin-left': '0.75in',
-            'encoding': 'UTF-8',
-            'no-outline': None,
-            'enable-local-file-access': None
-        }
-        
         try:
-            # Generate PDF using pdfkit (wkhtmltopdf wrapper)
-            pdfkit.from_string(html_content, output_path, options=options)
-            return output_path
+            # Check if wkhtmltopdf is installed
+            if not self._check_wkhtmltopdf():
+                raise RuntimeError("wkhtmltopdf is not installed. Please install it to generate PDF reports.")
+            
+            # Generate filename if not provided
+            if not filename:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"{client_name.replace(' ', '_')}_report_{timestamp}.pdf"
+            
+            pdf_path = os.path.join(self.report_dir, filename)
+            
+            # Configure pdfkit options
+            options = {
+                'page-size': 'A4',
+                'margin-top': '0.75in',
+                'margin-right': '0.75in',
+                'margin-bottom': '0.75in',
+                'margin-left': '0.75in',
+                'encoding': 'UTF-8',
+                'no-outline': None,
+                'enable-local-file-access': None,
+                'quiet': ''
+            }
+            
+            # Generate PDF
+            pdfkit.from_string(html_content, pdf_path, options=options)
+            
+            return pdf_path
+            
+        except OSError as e:
+            self.logger.error(f"Error generating PDF: {str(e)}")
+            raise RuntimeError(f"Failed to generate PDF: {str(e)}")
         except Exception as e:
-            self.logger.error(f"Error generating PDF: {e}")
-            return None
+            self.logger.error(f"Unexpected error generating PDF: {str(e)}")
+            raise
+    
+    def _check_wkhtmltopdf(self):
+        """
+        Check if wkhtmltopdf is installed and accessible.
+        
+        Returns:
+            bool: True if wkhtmltopdf is installed and accessible
+        """
+        try:
+            # Try to get wkhtmltopdf version
+            import subprocess
+            result = subprocess.run(['wkhtmltopdf', '--version'], 
+                                 capture_output=True, 
+                                 text=True)
+            return result.returncode == 0
+        except FileNotFoundError:
+            self.logger.error("wkhtmltopdf is not installed")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error checking wkhtmltopdf installation: {str(e)}")
+            return False
     
     def _generate_performance_chart(self, results):
         """

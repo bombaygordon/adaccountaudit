@@ -34,13 +34,13 @@ def retry_with_backoff(max_retries=3, base_delay=5, max_delay=60):
                 try:
                     return func(*args, **kwargs)
                 except FacebookRequestError as e:
-                    # Check if it's a rate limit error
-                    if e.api_error_code() == 17 and "User request limit reached" in str(e):
+                    # Add more robust rate limit detection
+                    if e.api_error_code() == 17 or "User request limit reached" in str(e) or "too many calls" in str(e).lower():
                         if retries == max_retries:
                             logger.warning(f"Rate limit reached and max retries ({max_retries}) exceeded")
                             raise
                         
-                        # Calculate delay with exponential backoff and jitter
+                        # Implement exponential backoff with jitter
                         delay = min(base_delay * (2 ** retries) + random.uniform(0, 1), max_delay)
                         logger.info(f"Rate limit hit, retrying in {delay:.2f} seconds (attempt {retries+1}/{max_retries})")
                         time.sleep(delay)
@@ -76,10 +76,10 @@ class AdPlatformConnector:
             
             logger.info(f"Attempting to connect to Facebook with token: {self.credentials['fb_access_token'][:10]}...")
             
-            # Initialize the Facebook Ads API with just the access token
-            api = FacebookAdsApi.init(
-                access_token=self.credentials['fb_access_token']
-            )
+            # Verify the token is valid before proceeding
+            api = FacebookAdsApi.init(access_token=self.credentials['fb_access_token'])
+            # Test the connection with a simple API call
+            AdAccount(f'act_{clean_account_id}').api_get(fields=['name'])
             
             # Store the API connection
             self.connections['facebook'] = api
@@ -87,8 +87,7 @@ class AdPlatformConnector:
             return True
             
         except FacebookRequestError as e:
-            error_message = f"Facebook API error: {e.api_error_message()}"
-            logger.error(error_message)
+            logger.error(f"Facebook API error: {e.api_error_message()}")
             return False
         except Exception as e:
             logger.error(f"Facebook connection error: {e}")

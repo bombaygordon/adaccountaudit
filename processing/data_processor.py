@@ -99,72 +99,131 @@ class AdDataProcessor:
         # Convert each entity to DataFrame
         for entity_type in ['campaigns', 'ad_sets', 'ads', 'insights']:
             if entity_type in data and data[entity_type]:
-                df = pd.DataFrame(data[entity_type])
-                
-                # Handle special fields
-                if entity_type == 'insights':
-                    # Convert date strings to datetime
-                    if 'date' in df.columns:
-                        df['date'] = pd.to_datetime(df['date'])
+                try:
+                    df = pd.DataFrame(data[entity_type])
                     
-                    # Extract actions (conversions, etc.)
-                    if 'actions' in df.columns:
-                        # This is complex in real FB data, simplified here
-                        df['purchases'] = df['actions'].apply(
-                            lambda x: sum(a.get('value', 0) for a in x if a.get('action_type') == 'purchase')
-                            if isinstance(x, list) else 0
-                        )
-                
-                processed[entity_type] = df
+                    # Handle special fields
+                    if entity_type == 'insights':
+                        # Convert date strings to datetime with error handling
+                        if 'date' in df.columns:
+                            try:
+                                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                                # Log any parsing errors
+                                if df['date'].isna().any():
+                                    logger.warning(f"Some dates could not be parsed in {entity_type}")
+                            except Exception as e:
+                                logger.error(f"Error parsing dates in {entity_type}: {str(e)}")
+                                df['date'] = pd.NaT  # Set invalid dates to NaT
+                        
+                        # Extract actions (conversions, etc.) with error handling
+                        if 'actions' in df.columns:
+                            try:
+                                df['purchases'] = df['actions'].apply(
+                                    lambda x: sum(a.get('value', 0) for a in x if a.get('action_type') == 'purchase')
+                                    if isinstance(x, list) else 0
+                                )
+                            except Exception as e:
+                                logger.error(f"Error processing actions in {entity_type}: {str(e)}")
+                                df['purchases'] = 0
+                        
+                        # Calculate metrics with error handling
+                        try:
+                            # Handle division by zero and missing columns
+                            if 'clicks' in df.columns and 'impressions' in df.columns:
+                                df['ctr'] = (df['clicks'] / df['impressions'].replace(0, np.nan)) * 100
+                            else:
+                                logger.warning(f"Missing clicks or impressions columns in {entity_type}")
+                                df['ctr'] = 0
+                            
+                            if 'spend' in df.columns and 'clicks' in df.columns:
+                                df['cpc'] = df['spend'] / df['clicks'].replace(0, np.nan)
+                            else:
+                                logger.warning(f"Missing spend or clicks columns in {entity_type}")
+                                df['cpc'] = 0
+                            
+                            if 'spend' in df.columns and 'impressions' in df.columns:
+                                df['cpm'] = (df['spend'] / df['impressions'].replace(0, np.nan)) * 1000
+                            else:
+                                logger.warning(f"Missing spend or impressions columns in {entity_type}")
+                                df['cpm'] = 0
+                            
+                            if 'purchases' in df.columns and 'clicks' in df.columns:
+                                df['conversion_rate'] = (df['purchases'] / df['clicks'].replace(0, np.nan)) * 100
+                            else:
+                                logger.warning(f"Missing purchases or clicks columns in {entity_type}")
+                                df['conversion_rate'] = 0
+                            
+                            if 'spend' in df.columns and 'purchases' in df.columns:
+                                df['cpa'] = df['spend'] / df['purchases'].replace(0, np.nan)
+                            else:
+                                logger.warning(f"Missing spend or purchases columns in {entity_type}")
+                                df['cpa'] = 0
+                                
+                        except Exception as e:
+                            logger.error(f"Error calculating metrics in {entity_type}: {str(e)}")
+                            # Add placeholder columns with default values
+                            for metric in ['ctr', 'cpc', 'cpm', 'conversion_rate', 'cpa']:
+                                df[metric] = 0
+                    
+                    processed[entity_type] = df
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {entity_type}: {str(e)}")
+                    processed[entity_type] = pd.DataFrame()  # Create empty DataFrame as fallback
         
         # Join insights with campaign, ad set, and ad data if available
         if 'insights' in processed and not processed['insights'].empty:
-            insights_df = processed['insights']
-            
-            # Join with campaigns
-            if 'campaigns' in processed and not processed['campaigns'].empty:
-                if 'campaign_id' in insights_df.columns and 'id' in processed['campaigns'].columns:
-                    campaigns_df = processed['campaigns']
-                    insights_df = pd.merge(
-                        insights_df, 
-                        campaigns_df,
-                        left_on='campaign_id',
-                        right_on='id',
-                        how='left',
-                        suffixes=('', '_campaign')
-                    )
-            
-            # Join with ad sets
-            if 'ad_sets' in processed and not processed['ad_sets'].empty:
-                if 'adset_id' in insights_df.columns and 'id' in processed['ad_sets'].columns:
-                    ad_sets_df = processed['ad_sets']
-                    insights_df = pd.merge(
-                        insights_df, 
-                        ad_sets_df,
-                        left_on='adset_id',
-                        right_on='id',
-                        how='left',
-                        suffixes=('', '_adset')
-                    )
-            
-            # Join with ads
-            if 'ads' in processed and not processed['ads'].empty:
-                if 'ad_id' in insights_df.columns and 'id' in processed['ads'].columns:
-                    ads_df = processed['ads']
-                    insights_df = pd.merge(
-                        insights_df, 
-                        ads_df,
-                        left_on='ad_id',
-                        right_on='id',
-                        how='left',
-                        suffixes=('', '_ad')
-                    )
-            
-            # Update insights with joined data
-            processed['insights'] = insights_df
-            
-            # Create a master dataset with all joined data
-            processed['master'] = insights_df
+            try:
+                insights_df = processed['insights']
+                
+                # Join with campaigns
+                if 'campaigns' in processed and not processed['campaigns'].empty:
+                    if 'campaign_id' in insights_df.columns and 'id' in processed['campaigns'].columns:
+                        campaigns_df = processed['campaigns']
+                        insights_df = pd.merge(
+                            insights_df, 
+                            campaigns_df,
+                            left_on='campaign_id',
+                            right_on='id',
+                            how='left',
+                            suffixes=('', '_campaign')
+                        )
+                
+                # Join with ad sets
+                if 'ad_sets' in processed and not processed['ad_sets'].empty:
+                    if 'adset_id' in insights_df.columns and 'id' in processed['ad_sets'].columns:
+                        ad_sets_df = processed['ad_sets']
+                        insights_df = pd.merge(
+                            insights_df, 
+                            ad_sets_df,
+                            left_on='adset_id',
+                            right_on='id',
+                            how='left',
+                            suffixes=('', '_adset')
+                        )
+                
+                # Join with ads
+                if 'ads' in processed and not processed['ads'].empty:
+                    if 'ad_id' in insights_df.columns and 'id' in processed['ads'].columns:
+                        ads_df = processed['ads']
+                        insights_df = pd.merge(
+                            insights_df, 
+                            ads_df,
+                            left_on='ad_id',
+                            right_on='id',
+                            how='left',
+                            suffixes=('', '_ad')
+                        )
+                
+                # Update insights with joined data
+                processed['insights'] = insights_df
+                
+                # Create a master dataset with all joined data
+                processed['master'] = insights_df
+                
+            except Exception as e:
+                logger.error(f"Error joining data: {str(e)}")
+                processed['master'] = pd.DataFrame()  # Create empty DataFrame as fallback
         
         return processed
     
