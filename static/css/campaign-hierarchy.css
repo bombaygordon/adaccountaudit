@@ -1,0 +1,77 @@
+.hierarchy-nav {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.breadcrumb {
+    margin-bottom: 0;
+}
+
+.hierarchy-content {
+    min-height: 300px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.metric-item {
+    text-align: center;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.card {
+    transition: transform 0.2s ease-in-out;
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-title {
+    color: #2c3e50;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.drill-down {
+    width: 100%;
+}
+
+/* Loading spinner styles */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .metric-item {
+        padding: 0.25rem;
+    }
+} 

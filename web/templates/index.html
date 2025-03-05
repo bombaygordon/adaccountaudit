@@ -13,101 +13,99 @@
         .recommendation-item {
             margin-bottom: 1rem;
             padding: 1rem;
-            border-left: 4px solid #0d6efd;
-            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        .recommendation-item.border-danger { border-left: 4px solid #dc3545; }
+        .recommendation-item.border-warning { border-left: 4px solid #ffc107; }
+        .recommendation-item.border-success { border-left: 4px solid #28a745; }
+        .recommendation-item.border-info { border-left: 4px solid #17a2b8; }
+        .raw-analysis {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            line-height: 1.6;
+        }
+        .raw-analysis h3 {
+            color: #0d6efd;
+            font-size: 1.1rem;
+            margin-top: 1rem;
+            font-weight: 600;
+        }
+        .raw-analysis ul {
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .raw-analysis li {
+            margin-bottom: 0.5rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="mb-4">AI Ad Account Auditor</h1>
-        
-        <div class="card mb-4">
-            <div class="card-header">
-                <h4>Run Test Audit</h4>
-            </div>
-            <div class="card-body">
-                <p>Click the button below to run a test audit with mock data:</p>
-                <button id="testAuditBtn" class="btn btn-primary">Run Test Audit</button>
-            </div>
-        </div>
-        
-        <div id="resultsSection" style="display: none;">
-            <h2>Audit Results</h2>
-            
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h4>Summary</h4>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>Platforms Audited:</strong> <span id="platformsAudited"></span></p>
-                            <p><strong>Potential Savings:</strong> <span id="potentialSavings"></span></p>
-                            <p><strong>Potential Improvement:</strong> <span id="potentialImprovement"></span></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="main-content">
+            <h1 class="mb-4">AI Ad Account Auditor</h1>
             
             <div class="card mb-4">
                 <div class="card-header">
-                    <h4>Top Recommendations</h4>
+                    <h4>Run Facebook Ads Audit</h4>
                 </div>
                 <div class="card-body">
-                    <div id="recommendationsList"></div>
+                    <div id="connectionStatus" class="alert alert-warning">
+                        Checking Facebook connection...
+                    </div>
+                    <button id="runAuditBtn" class="btn btn-primary" disabled>Run Audit</button>
+                    <a href="/connect/facebook" class="btn btn-outline-primary ms-2">Connect Facebook Account</a>
+                </div>
+            </div>
+            
+            <div id="errorAlert" style="display: none;"></div>
+            <div id="loadingIndicator" style="display: none;"></div>
+            
+            <div id="resultsSection" style="display: none;">
+                <h2>Audit Results</h2>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4>Summary</h4>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Platforms Audited:</strong> <span id="platformsAudited"></span></p>
+                                <p><strong>Potential Savings:</strong> <span id="potentialSavings"></span></p>
+                                <p><strong>Potential Improvement:</strong> <span id="potentialImprovement"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4>AI-Generated Recommendations</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="recommendationsList"></div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4>Performance Analysis</h4>
+                        <small class="text-muted">Detailed analysis from GPT-4</small>
+                    </div>
+                    <div class="card-body">
+                        <div id="rawAnalysis" class="raw-analysis"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <script>
-        document.getElementById('testAuditBtn').addEventListener('click', async () => {
-            try {
-                // Show loading state
-                document.getElementById('testAuditBtn').disabled = true;
-                document.getElementById('testAuditBtn').innerText = 'Running Audit...';
-                
-                // Fetch test audit results
-                const response = await fetch('/api/test-audit');
-                const data = await response.json();
-                
-                // Update UI with results
-                document.getElementById('platformsAudited').innerText = 'Facebook (Mock Data)';
-                document.getElementById('potentialSavings').innerText = `$${data.potential_savings || 0}`;
-                document.getElementById('potentialImprovement').innerText = `${data.potential_improvement_percentage || 0}%`;
-                
-                // Display recommendations
-                const recommendationsList = document.getElementById('recommendationsList');
-                recommendationsList.innerHTML = '';
-                
-                if (data.prioritized_recommendations && data.prioritized_recommendations.length > 0) {
-                    data.prioritized_recommendations.forEach(rec => {
-                        const recItem = document.createElement('div');
-                        recItem.className = 'recommendation-item';
-                        recItem.innerHTML = `<p>${rec.recommendation}</p>`;
-                        recommendationsList.appendChild(recItem);
-                    });
-                } else {
-                    recommendationsList.innerHTML = '<p>No recommendations found.</p>';
-                }
-                
-                // Show results section
-                document.getElementById('resultsSection').style.display = 'block';
-                
-                // Reset button
-                document.getElementById('testAuditBtn').disabled = false;
-                document.getElementById('testAuditBtn').innerText = 'Run Test Audit Again';
-                
-            } catch (error) {
-                console.error('Error fetching audit results:', error);
-                alert('An error occurred while fetching audit results. Please try again.');
-                
-                // Reset button
-                document.getElementById('testAuditBtn').disabled = false;
-                document.getElementById('testAuditBtn').innerText = 'Run Test Audit';
-            }
-        });
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/dashboard.js"></script>
 </body>
 </html>

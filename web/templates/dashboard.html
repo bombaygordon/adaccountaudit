@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/campaign-hierarchy.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
     <!-- Top Navigation Bar -->
@@ -125,6 +130,71 @@
     <div class="row">
         <!-- Recommendations -->
         <div class="col-lg-8 mb-4">
+            <!-- Performance Metrics -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Performance Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">Total Spend</h6>
+                                <div class="metric-value" id="metric-totalSpend">$0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">Click-Through Rate</h6>
+                                <div class="metric-value" id="metric-ctr">0.00%</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">Cost per Click</h6>
+                                <div class="metric-value" id="metric-cpc">$0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">CPM</h6>
+                                <div class="metric-value" id="metric-cpm">$0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">Conversion Rate</h6>
+                                <div class="metric-value" id="metric-conversionRate">0.00%</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="metric-card">
+                                <h6 class="metric-title">ROAS</h6>
+                                <div class="metric-value" id="metric-roas">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Performance Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <canvas id="campaignStatusChart"></canvas>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <canvas id="spendOverviewChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recommendations Section -->
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Priority Recommendations</h5>
@@ -133,7 +203,7 @@
                     </a>
                 </div>
                 <div class="card-body">
-                    <div id="recommendationsList">
+                    <div id="recommendationsContainer">
                         <div class="text-center py-4">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
@@ -143,13 +213,18 @@
                 </div>
             </div>
             
-            <!-- Performance Chart -->
+            <!-- Campaign Hierarchy -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Campaign Performance</h5>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshHierarchy">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <canvas id="campaignChart" height="250"></canvas>
+                    <div id="campaignHierarchy"></div>
                 </div>
             </div>
         </div>
@@ -205,4 +280,16 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/campaign-hierarchy.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize campaign hierarchy
+        const hierarchy = new CampaignHierarchy('campaignHierarchy');
+        
+        // Refresh button handler
+        document.getElementById('refreshHierarchy').addEventListener('click', () => {
+            hierarchy.loadData();
+        });
+    });
+</script>
 {% endblock %}

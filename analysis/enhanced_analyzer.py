@@ -51,6 +51,7 @@ class EnhancedAdAccountAnalyzer:
             'account_overview': {},
             'insights': {},
             'recommendations': [],
+            'ai_recommendations': [],  # New field for AI-driven recommendations
             'metrics': {},
             'potential_savings': 0,
             'potential_improvement_percentage': 0
@@ -59,45 +60,51 @@ class EnhancedAdAccountAnalyzer:
         # Analyze account overview
         results['account_overview'] = self._analyze_account_overview(processed_data)
         
-        # Run budget optimization analysis
+        # Run existing analyses
         budget_results = self._analyze_budget_efficiency(processed_data)
         if budget_results:
             results['insights']['budget_efficiency'] = budget_results.get('efficiency_metrics', {})
             results['recommendations'].extend(budget_results.get('recommendations', []))
             results['metrics']['budget_efficiency'] = self._extract_budget_metrics(budget_results)
         
-        # Run audience targeting analysis
         audience_results = self._analyze_audience_targeting(processed_data)
         if audience_results:
             results['insights']['audience_targeting'] = audience_results.get('segments', {})
             results['recommendations'].extend(audience_results.get('recommendations', []))
             results['metrics']['audience_targeting'] = self._extract_audience_metrics(audience_results)
         
-        # Run ad fatigue analysis
         fatigue_results = self._analyze_ad_fatigue(processed_data)
         if fatigue_results:
             results['insights']['ad_fatigue'] = fatigue_results.get('fatigued_ads', [])
             results['recommendations'].extend(fatigue_results.get('recommendations', []))
             results['metrics']['ad_fatigue'] = self._extract_fatigue_metrics(fatigue_results)
         
-        # Run creative performance analysis
         creative_results = self._analyze_creative_performance(processed_data)
         if creative_results:
             results['insights']['creative_performance'] = creative_results
             results['recommendations'].extend(creative_results.get('recommendations', []))
             results['metrics']['creative_performance'] = self._extract_creative_metrics(creative_results)
         
+        # Generate AI-driven recommendations
+        results['ai_recommendations'] = self._generate_ai_driven_recommendations(processed_data, results)
+        
         # Prioritize all recommendations
         results['recommendations'] = self._prioritize_recommendations(results['recommendations'])
         
         # Calculate overall potential savings
         results['potential_savings'] = sum(rec.get('potential_savings', 0) for rec in results['recommendations'])
+        results['potential_savings'] += sum(rec.get('potential_savings', 0) for rec in results['ai_recommendations'])
         
         # Calculate potential improvement percentage
         results['potential_improvement_percentage'] = self._calculate_improvement_potential(
-            results['recommendations'], results['account_overview'].get('total_spend', 0))
+            results['recommendations'] + results['ai_recommendations'],
+            results['account_overview'].get('total_spend', 0)
+        )
         
-        self.logger.info(f"Enhanced analysis complete with {len(results['recommendations'])} recommendations")
+        self.logger.info(
+            f"Enhanced analysis complete with {len(results['recommendations'])} standard recommendations "
+            f"and {len(results['ai_recommendations'])} AI-driven recommendations"
+        )
         
         return results
     
@@ -331,9 +338,86 @@ class EnhancedAdAccountAnalyzer:
         
         return overview
     
+    def _generate_budget_reallocation_recommendations(self, campaign_metrics):
+        """
+        Generate AI-driven budget reallocation recommendations based on campaign performance.
+        
+        Args:
+            campaign_metrics (pd.DataFrame): DataFrame containing campaign performance metrics
+            
+        Returns:
+            list: List of budget reallocation recommendations
+        """
+        recommendations = []
+        
+        try:
+            # Ensure we have required metrics
+            required_metrics = ['campaign_id', 'campaign_name', 'spend', 'conversions', 'cpa', 'roas']
+            if not all(metric in campaign_metrics.columns for metric in required_metrics):
+                return recommendations
+            
+            # Filter for active campaigns with significant spend
+            active_campaigns = campaign_metrics[campaign_metrics['spend'] >= 50]  # Min $50 spend
+            if len(active_campaigns) < 2:  # Need at least 2 campaigns to compare
+                return recommendations
+            
+            # Calculate performance metrics
+            avg_cpa = active_campaigns['cpa'].mean()
+            avg_roas = active_campaigns['roas'].mean()
+            
+            # Identify top and bottom performing campaigns
+            top_campaigns = active_campaigns[
+                (active_campaigns['cpa'] < avg_cpa * 0.8) &  # 20% better CPA than average
+                (active_campaigns['roas'] > avg_roas * 1.2)  # 20% better ROAS than average
+            ]
+            
+            bottom_campaigns = active_campaigns[
+                (active_campaigns['cpa'] > avg_cpa * 1.2) &  # 20% worse CPA than average
+                (active_campaigns['roas'] < avg_roas * 0.8)  # 20% worse ROAS than average
+            ]
+            
+            # Generate reallocation recommendations
+            for bottom_campaign in bottom_campaigns.itertuples():
+                # Find the best performing campaign to reallocate to
+                best_alternative = top_campaigns[top_campaigns['campaign_id'] != bottom_campaign.campaign_id]
+                if not best_alternative.empty:
+                    best_campaign = best_alternative.iloc[0]
+                    
+                    # Calculate recommended reallocation amount (50% of bottom campaign's budget)
+                    reallocation_amount = bottom_campaign.spend * 0.5
+                    
+                    # Calculate potential impact
+                    current_cpa = bottom_campaign.cpa
+                    better_cpa = best_campaign['cpa']
+                    potential_savings = reallocation_amount * (1 - better_cpa/current_cpa)
+                    
+                    recommendation = {
+                        'type': 'budget_reallocation',
+                        'severity': 'high',
+                        'source_campaign_id': bottom_campaign.campaign_id,
+                        'source_campaign_name': bottom_campaign.campaign_name,
+                        'target_campaign_id': best_campaign['campaign_id'],
+                        'target_campaign_name': best_campaign['campaign_name'],
+                        'reallocation_amount': reallocation_amount,
+                        'potential_savings': potential_savings,
+                        'recommendation': (
+                            f"Reallocate ${reallocation_amount:.2f} from campaign '{bottom_campaign.campaign_name}' "
+                            f"(CPA: ${bottom_campaign.cpa:.2f}, ROAS: {bottom_campaign.roas:.2f}x) to "
+                            f"campaign '{best_campaign['campaign_name']}' "
+                            f"(CPA: ${best_campaign['cpa']:.2f}, ROAS: {best_campaign['roas']:.2f}x). "
+                            f"This could save approximately ${potential_savings:.2f} based on performance difference."
+                        )
+                    }
+                    recommendations.append(recommendation)
+        
+        except Exception as e:
+            self.logger.error(f"Error generating budget reallocation recommendations: {e}")
+        
+        return recommendations
+    
     def _analyze_budget_efficiency(self, processed_data):
         """
-        Analyze budget efficiency using the BudgetOptimizer.
+        Analyze budget efficiency and generate optimization recommendations.
         
         Args:
             processed_data (dict): Processed account data
@@ -341,21 +425,35 @@ class EnhancedAdAccountAnalyzer:
         Returns:
             dict: Budget efficiency analysis results
         """
-        # Extract needed dataframes
-        campaigns_df = processed_data.get('campaigns')
-        ad_sets_df = processed_data.get('ad_sets')
-        ads_df = processed_data.get('ads')
-        insights_df = processed_data.get('insights')
-        
-        if campaigns_df is None or campaigns_df.empty or insights_df is None or insights_df.empty:
-            self.logger.warning("Insufficient data for budget efficiency analysis")
-            return None
-        
         try:
-            # Run budget optimization analysis
-            budget_analysis = self.budget_optimizer.analyze(
-                campaigns_df, ad_sets_df, ads_df, insights_df)
-            return budget_analysis
+            campaign_metrics = processed_data.get('campaign_metrics')
+            if campaign_metrics is None or campaign_metrics.empty:
+                return None
+            
+            results = {
+                'efficiency_metrics': {},
+                'recommendations': [],
+                'estimated_savings': 0
+            }
+            
+            # Get AI-driven budget reallocation recommendations
+            budget_recommendations = self._generate_budget_reallocation_recommendations(campaign_metrics)
+            results['recommendations'].extend(budget_recommendations)
+            
+            # Calculate total potential savings
+            results['estimated_savings'] = sum(rec['potential_savings'] for rec in budget_recommendations)
+            
+            # Add efficiency metrics
+            results['efficiency_metrics'] = {
+                'total_spend': campaign_metrics['spend'].sum(),
+                'average_cpa': campaign_metrics['cpa'].mean(),
+                'average_roas': campaign_metrics['roas'].mean(),
+                'campaigns_analyzed': len(campaign_metrics),
+                'optimization_opportunities': len(budget_recommendations)
+            }
+            
+            return results
+            
         except Exception as e:
             self.logger.error(f"Error in budget efficiency analysis: {e}")
             return None
@@ -935,3 +1033,178 @@ class EnhancedAdAccountAnalyzer:
         improvement_percentage = min(scaled_improvement * 2.5, 50.0)
         
         return improvement_percentage
+    
+    def _generate_ai_driven_recommendations(self, processed_data, results):
+        """
+        Generate comprehensive AI-driven recommendations by analyzing multiple aspects of account performance.
+        
+        Args:
+            processed_data (dict): Processed account data
+            results (dict): Current analysis results
+            
+        Returns:
+            list: List of AI-driven recommendations
+        """
+        ai_recommendations = []
+        
+        try:
+            # Extract key metrics and data
+            account_overview = results.get('account_overview', {})
+            total_spend = account_overview.get('total_spend', 0)
+            total_conversions = account_overview.get('total_conversions', 0)
+            overall_cpa = account_overview.get('cpa', 0)
+            overall_roas = account_overview.get('roas', 0)
+            overall_ctr = account_overview.get('ctr', 0)
+            
+            campaign_metrics = processed_data.get('campaign_metrics')
+            ad_sets = processed_data.get('ad_sets')
+            ads = processed_data.get('ads')
+            
+            if campaign_metrics is not None and not campaign_metrics.empty:
+                # 1. Budget Allocation Strategy
+                high_roas_campaigns = campaign_metrics[
+                    (campaign_metrics['roas'] > overall_roas * 1.2) &
+                    (campaign_metrics['spend'] >= 100)
+                ]
+                
+                low_roas_campaigns = campaign_metrics[
+                    (campaign_metrics['roas'] < overall_roas * 0.8) &
+                    (campaign_metrics['spend'] >= 100)
+                ]
+                
+                if not high_roas_campaigns.empty and not low_roas_campaigns.empty:
+                    for _, low_camp in low_roas_campaigns.iterrows():
+                        best_alternative = high_roas_campaigns.iloc[0]
+                        reallocation_amount = low_camp['spend'] * 0.6  # Suggest moving 60% of budget
+                        
+                        recommendation = {
+                            'type': 'smart_budget_optimization',
+                            'severity': 'high',
+                            'category': 'Budget Optimization',
+                            'title': 'Strategic Budget Reallocation',
+                            'potential_savings': reallocation_amount * (best_alternative['roas'] - low_camp['roas']),
+                            'recommendation': (
+                                f"Strategically reallocate ${reallocation_amount:.2f} from campaign '{low_camp['campaign_name']}' "
+                                f"(ROAS: {low_camp['roas']:.2f}x, CPA: ${low_camp['cpa']:.2f}) to "
+                                f"'{best_alternative['campaign_name']}' (ROAS: {best_alternative['roas']:.2f}x, "
+                                f"CPA: ${best_alternative['cpa']:.2f}). This optimization could improve overall account ROAS "
+                                f"by approximately {((best_alternative['roas'] - low_camp['roas']) * 0.6):.2f}x."
+                            ),
+                            'action_items': [
+                                f"Reduce daily budget of '{low_camp['campaign_name']}' by 60%",
+                                f"Increase daily budget of '{best_alternative['campaign_name']}' by ${reallocation_amount:.2f}",
+                                "Monitor performance for 7 days after reallocation"
+                            ]
+                        }
+                        ai_recommendations.append(recommendation)
+                
+                # 2. Bidding Strategy Optimization
+                for _, campaign in campaign_metrics.iterrows():
+                    if campaign['cpa'] > overall_cpa * 1.3 and campaign['spend'] >= 100:
+                        recommendation = {
+                            'type': 'bidding_strategy_optimization',
+                            'severity': 'medium',
+                            'category': 'Bidding Strategy',
+                            'title': 'Optimize Bidding Strategy',
+                            'potential_savings': campaign['spend'] * 0.2,  # Estimate 20% cost reduction
+                            'recommendation': (
+                                f"Campaign '{campaign['campaign_name']}' has a high CPA (${campaign['cpa']:.2f}) compared to "
+                                f"account average (${overall_cpa:.2f}). Implement target CPA bidding strategy with a target "
+                                f"of ${(overall_cpa * 1.1):.2f} to improve efficiency while maintaining volume."
+                            ),
+                            'action_items': [
+                                f"Switch '{campaign['campaign_name']}' to target CPA bidding",
+                                f"Set initial target CPA to ${(overall_cpa * 1.1):.2f}",
+                                "Monitor for 5-7 days and adjust if needed",
+                                "Consider implementing automated rules for bid adjustments"
+                            ]
+                        }
+                        ai_recommendations.append(recommendation)
+            
+            # 3. Creative Performance Optimization
+            if ads is not None and not ads.empty:
+                ads['ctr'] = (ads['clicks'] / ads['impressions']) * 100
+                top_ctr_ads = ads.nlargest(3, 'ctr')
+                
+                if not top_ctr_ads.empty:
+                    best_ad = top_ctr_ads.iloc[0]
+                    recommendation = {
+                        'type': 'creative_optimization',
+                        'severity': 'medium',
+                        'category': 'Creative Strategy',
+                        'title': 'Scale Top-Performing Creative Elements',
+                        'potential_savings': 0,  # Focus on performance improvement
+                        'recommendation': (
+                            f"Your top-performing ad '{best_ad['ad_name']}' has a CTR of {best_ad['ctr']:.2f}%, "
+                            f"significantly above account average of {overall_ctr:.2f}%. Create new ad variations using "
+                            f"similar creative elements and messaging strategy to scale performance."
+                        ),
+                        'action_items': [
+                            f"Analyze creative elements of '{best_ad['ad_name']}'",
+                            "Create 3-5 new ad variations with similar successful elements",
+                            "Implement A/B testing with new variations",
+                            "Allocate 20% of campaign budget to testing new creatives"
+                        ]
+                    }
+                    ai_recommendations.append(recommendation)
+            
+            # 4. Audience Targeting Optimization
+            if ad_sets is not None and not ad_sets.empty:
+                ad_sets['conversion_rate'] = (ad_sets['conversions'] / ad_sets['clicks']) * 100
+                top_converting_sets = ad_sets.nlargest(2, 'conversion_rate')
+                
+                if not top_converting_sets.empty:
+                    best_adset = top_converting_sets.iloc[0]
+                    recommendation = {
+                        'type': 'audience_optimization',
+                        'severity': 'high',
+                        'category': 'Audience Strategy',
+                        'title': 'Expand High-Converting Audiences',
+                        'potential_savings': 0,  # Focus on scaling success
+                        'recommendation': (
+                            f"Ad set '{best_adset['adset_name']}' shows strong performance with "
+                            f"{best_adset['conversion_rate']:.2f}% conversion rate. Create lookalike audiences "
+                            f"and expand targeting to similar demographics to scale results."
+                        ),
+                        'action_items': [
+                            f"Create 1% and 3% lookalike audiences based on converters from '{best_adset['adset_name']}'",
+                            "Set up new ad sets with expanded targeting",
+                            "Start with 25% of original ad set's budget",
+                            "Monitor audience overlap and adjust as needed"
+                        ]
+                    }
+                    ai_recommendations.append(recommendation)
+            
+            # 5. Campaign Structure Optimization
+            if campaign_metrics is not None and len(campaign_metrics) > 5:
+                recommendation = {
+                    'type': 'campaign_structure_optimization',
+                    'severity': 'medium',
+                    'category': 'Account Structure',
+                    'title': 'Optimize Campaign Structure',
+                    'potential_savings': total_spend * 0.15,  # Estimate 15% efficiency improvement
+                    'recommendation': (
+                        f"Your account has {len(campaign_metrics)} active campaigns. Consider consolidating "
+                        f"similar campaigns and implementing a clear campaign hierarchy based on objectives "
+                        f"to improve overall account efficiency and reduce management overhead."
+                    ),
+                    'action_items': [
+                        "Audit current campaign objectives and targeting overlap",
+                        "Consolidate campaigns with similar targets/objectives",
+                        "Implement clear naming conventions",
+                        "Create campaign groups by primary objective"
+                    ]
+                }
+                ai_recommendations.append(recommendation)
+            
+            # Sort recommendations by severity and potential impact
+            ai_recommendations.sort(key=lambda x: (
+                {'high': 3, 'medium': 2, 'low': 1}[x['severity']],
+                x.get('potential_savings', 0)
+            ), reverse=True)
+            
+            return ai_recommendations
+            
+        except Exception as e:
+            self.logger.error(f"Error generating AI recommendations: {e}")
+            return []

@@ -1,9 +1,7 @@
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-
-db = SQLAlchemy()
+from extensions import db
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -13,6 +11,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
+    facebook_credentials = db.Column(db.JSON)
     
     # Define the relationship with clients
     clients = db.relationship('Client', backref='author', lazy='dynamic')

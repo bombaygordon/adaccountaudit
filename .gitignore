@@ -1,25 +1,67 @@
-@"
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
-.env
-*.log
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Reports and generated files
-reports/
-*.pdf
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+enhanced_audit.log
+
+# Cache
+cache/
+.cache/
+
+# Test coverage
+.coverage
+htmlcov/
+
+# Local SSL certificates
+*.pem
+*.key
+*.crt
 
 # Database
 *.db
-*.sqlite
+*.sqlite3
 
-# IDE specific files
-.vscode/
-.idea/
+# Reports
+reports/
+*.pdf
 
 # OS specific files
 .DS_Store
 Thumbs.db
-"@ | Out-File -FilePath .gitignore -Encoding utf8

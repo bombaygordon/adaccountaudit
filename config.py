@@ -1,5 +1,9 @@
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 class Config:
     # Flask configuration
@@ -7,7 +11,7 @@ class Config:
     DEBUG = os.environ.get('DEBUG') or True
     
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URI') or 'sqlite:///app.db'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URI') or 'sqlite:///app_new.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Remember me cookie duration
@@ -26,3 +30,16 @@ class Config:
     # Security settings
     JWT_SECRET = os.environ.get('JWT_SECRET') or 'your-jwt-secret-for-development'
     JWT_EXPIRATION = int(os.environ.get('JWT_EXPIRATION') or 3600)  # 1 hour
+    
+    # OpenAI configuration
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    
+    @staticmethod
+    def validate():
+        """Validate required configuration."""
+        if not Config.OPENAI_API_KEY:
+            raise ValueError(
+                "OpenAI API key not found. Please set it using one of these methods:\n"
+                "1. Environment variable: OPENAI_API_KEY\n"
+                "2. Create a .env file with: OPENAI_API_KEY=your-key-here"
+            )

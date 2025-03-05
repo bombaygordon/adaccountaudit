@@ -62,9 +62,13 @@ class AdPlatformConnector:
         self.credentials = credentials
         self.connections = {}
         
-    def connect_facebook(self):
-        """Establish connection to Facebook/Instagram Ads API using OAuth"""
+    def connect_facebook(self, account_id: str) -> bool:
+        """Connect to Facebook Ads API."""
         try:
+            # Remove 'act_' prefix if it exists
+            clean_account_id = account_id.replace('act_', '')
+            self.account_id = clean_account_id  # Store without 'act_' prefix
+            
             # Check if we have the access token
             if 'fb_access_token' not in self.credentials:
                 logger.error("Missing Facebook access token")
@@ -128,40 +132,18 @@ class AdPlatformConnector:
                 # Add a small delay before making API calls to help avoid rate limits
                 time.sleep(1)
                 
-                logger.info(f"Attempting to fetch real Facebook data for account {account_id}")
+                logger.info(f"Fetching real Facebook data for account {account_id}")
                 logger.info(f"Using access token starting with: {self.credentials['fb_access_token'][:15]}...")
-                real_data = self._fetch_facebook_data(account_id, start_date, end_date)
-                
-                # Improved verification of real data
-                has_real_data = (
-                    real_data and 
-                    'campaigns' in real_data and 
-                    len(real_data['campaigns']) > 0 and
-                    'insights' in real_data and 
-                    len(real_data['insights']) > 0
-                )
-                
-                if has_real_data:
-                    logger.info(f"Successfully fetched real Facebook data: {len(real_data['campaigns'])} campaigns, {len(real_data['insights'])} insights")
-                    return real_data
-                else:
-                    logger.warning("Real Facebook data fetch returned empty or incomplete results")
-                    logger.warning(f"Data structure returned: {json.dumps(real_data, default=str)[:500]}...")
-                    
-                    # For debugging purposes, if we have partial data, let's return that instead of mock data
-                    if real_data and ('campaigns' in real_data or 'insights' in real_data):
-                        logger.info("Returning partial real data for debugging")
-                        return real_data
-                    
-                    logger.warning("Falling back to mock data due to empty/missing data")
-                    return self._get_mock_facebook_data(account_id, start_date, end_date)
+                return self._fetch_facebook_data(account_id, start_date, end_date)
+            
             except Exception as e:
                 logger.error(f"Error fetching Facebook data: {e}", exc_info=True)
-                logger.warning(f"Error details: {str(e)}")
-                logger.info("Falling back to mock data due to error")
-                return self._get_mock_facebook_data(account_id, start_date, end_date)
+                logger.error(f"Error details: {str(e)}")
+                raise
         elif platform == 'tiktok':
-            return self._get_mock_tiktok_data(account_id, start_date, end_date)
+            raise NotImplementedError("TikTok data fetching not yet implemented")
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
     
     @retry_with_backoff(max_retries=3, base_delay=5, max_delay=60)
     def _fetch_campaigns(self, account):
@@ -202,7 +184,7 @@ class AdPlatformConnector:
     
     @retry_with_backoff(max_retries=3, base_delay=10, max_delay=120)
     def _fetch_facebook_data(self, account_id, start_date, end_date):
-        """Fetch minimal Facebook data with retry logic"""
+        """Fetch Facebook data with retry logic"""
         try:
             # Format dates for Facebook API
             start_date_str = start_date.strftime('%Y-%m-%d')
@@ -211,44 +193,46 @@ class AdPlatformConnector:
             logger.info(f"Fetching Facebook data from {start_date_str} to {end_date_str}")
             logger.info(f"Account ID: {account_id}")
             
-            # Initialize the Ad Account object
+            # Initialize the Ad Account object - add act_ prefix here
             account = AdAccount(f'act_{account_id}')
             
-            # Only fetch campaigns
+            # Fetch campaigns with detailed logging
+            logger.info("Fetching campaigns...")
             campaigns = self._fetch_campaigns(account)
-            campaigns_data = [campaign.export_all_data() for campaign in campaigns]
-            
             if not campaigns:
-                logger.warning("No campaigns found for this account")
-            else:
-                logger.info(f"Found {len(campaigns)} campaigns")
+                logger.error("No campaigns found - this indicates an issue with permissions or the account")
+                raise ValueError("No campaigns found in the account. Please check permissions and account status.")
+            
+            campaigns_data = [campaign.export_all_data() for campaign in campaigns]
+            logger.info(f"Successfully fetched {len(campaigns_data)} campaigns")
             
             # Add delay between API calls
             time.sleep(2)
             
-            # Fetch only essential insights
+            # Fetch insights with detailed logging
+            logger.info("Fetching campaign insights...")
             insights = self._fetch_insights(account, start_date_str, end_date_str)
-            insights_data = [insight.export_all_data() for insight in insights]
-            
             if not insights:
-                logger.warning("No insights data found for this account")
-            else:
-                logger.info(f"Found {len(insights)} insights records")
+                logger.error("No insights data found - this indicates an issue with the date range or data availability")
+                raise ValueError("No insights data found. Please check the date range and account activity.")
             
-            # Process insights to extract the specific metrics we need
+            insights_data = [insight.export_all_data() for insight in insights]
+            logger.info(f"Successfully fetched {len(insights_data)} insights records")
+            
+            # Process insights
             self._process_facebook_insights(insights_data)
             
-            # Return only the needed data
+            # Return the real data
             result = {
                 'campaigns': campaigns_data,
                 'insights': insights_data
             }
             
-            logger.info(f"Returning minimal Facebook data with {len(campaigns_data)} campaigns, {len(insights_data)} insights")
+            logger.info(f"Successfully fetched real Facebook data with {len(campaigns_data)} campaigns and {len(insights_data)} insights")
             return result
             
         except FacebookRequestError as e:
-            error_message = f"Facebook API error while fetching data: {e.api_error_message()}"
+            error_message = f"Facebook API error: {e.api_error_message()}"
             logger.error(error_message)
             logger.error(f"Error details: Request: {e.request_context}, Code: {e.api_error_code()}")
             raise
