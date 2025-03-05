@@ -1,4 +1,4 @@
-// Enhanced campaign hierarchy class with better error handling and data processing
+// Enhanced campaign hierarchy class with proper error handling and data processing
 class EnhancedCampaignHierarchy {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -38,9 +38,10 @@ class EnhancedCampaignHierarchy {
 
     async loadData() {
         try {
-            const fbCredentials = JSON.parse(sessionStorage.getItem('fb_credentials') || '{}');
+            // Get Facebook credentials from session storage
+            const fbCredentials = this.getSafeCredentials();
             
-            if (!fbCredentials.access_token || !fbCredentials.account_id) {
+            if (!fbCredentials) {
                 this.showError('Facebook credentials not found. Please reconnect your account.');
                 return;
             }
@@ -61,8 +62,8 @@ class EnhancedCampaignHierarchy {
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
                 if (response.status === 429) {
-                    // Rate limit error
-                    const retryAfter = data.retry_after || 300; // Default to 5 minutes
+                    // Handle rate limit error
+                    const retryAfter = data.retry_after || 300;
                     this.showRateLimitError(retryAfter);
                     return;
                 }
@@ -76,7 +77,7 @@ class EnhancedCampaignHierarchy {
                 throw new Error(data.error || 'Failed to load hierarchy data');
             }
             
-            // If we have hierarchy data, process it
+            // Process the hierarchy data
             if (data.hierarchy && Array.isArray(data.hierarchy)) {
                 // Store the data
                 this.data = data;
@@ -122,6 +123,25 @@ class EnhancedCampaignHierarchy {
             }
         } finally {
             this.hideLoading();
+        }
+    }
+
+    // Get safe credentials from session storage
+    getSafeCredentials() {
+        try {
+            const credString = sessionStorage.getItem('fb_credentials');
+            if (!credString) return null;
+            
+            const creds = JSON.parse(credString);
+            if (!creds.access_token || !creds.account_id) return null;
+            
+            return {
+                access_token: creds.access_token,
+                account_id: creds.account_id
+            };
+        } catch (e) {
+            console.error('Error parsing stored credentials:', e);
+            return null;
         }
     }
 
@@ -278,7 +298,7 @@ class EnhancedCampaignHierarchy {
         } else if (this.currentLevel === 'adsets') {
             const campaignId = this.breadcrumbs[0].id;
             const campaign = this.data.hierarchy.find(c => c.id === campaignId);
-            return campaign ? campaign.ad_sets || [] : [];
+            return campaign ? (campaign.ad_sets || []) : [];
         } else if (this.currentLevel === 'ads') {
             const campaignId = this.breadcrumbs[0].id;
             const adsetId = this.breadcrumbs[1].id;
@@ -286,8 +306,8 @@ class EnhancedCampaignHierarchy {
             const campaign = this.data.hierarchy.find(c => c.id === campaignId);
             if (!campaign) return [];
             
-            const adset = campaign.ad_sets.find(a => a.id === adsetId);
-            return adset ? adset.ads || [] : [];
+            const adset = (campaign.ad_sets || []).find(a => a.id === adsetId);
+            return adset ? (adset.ads || []) : [];
         }
         return [];
     }
@@ -323,16 +343,20 @@ class EnhancedCampaignHierarchy {
     }
 
     createItemCard(item) {
-        const metrics = this.getMetrics(item);
-        const status = item.status.toLowerCase();
+        // Make sure item has a status property with a string value
+        const status = item && item.status ? 
+            (typeof item.status === 'string' ? item.status.toLowerCase() : String(item.status).toLowerCase()) : 
+            'unknown';
+            
         const statusClass = status === 'active' ? 'text-success' : 'text-muted';
+        const metrics = this.getMetrics(item);
         
         return `
             <div class="col-md-6 col-lg-4 mb-4">
                 <div class="card h-100" data-item-id="${item.id}">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">${item.name}</h5>
+                            <h5 class="card-title mb-0">${item.name || 'Unnamed'}</h5>
                             <span class="badge ${statusClass}">${status}</span>
                         </div>
                         <div class="metrics-grid">
@@ -340,7 +364,7 @@ class EnhancedCampaignHierarchy {
                         </div>
                     </div>
                     <div class="card-footer bg-transparent">
-                        <button class="btn btn-primary btn-sm view-details" data-id="${item.id}" data-name="${item.name}">
+                        <button class="btn btn-primary btn-sm view-details" data-id="${item.id}" data-name="${item.name || 'Unnamed'}">
                             View ${this.getNextLevel()}
                         </button>
                     </div>
@@ -363,37 +387,29 @@ class EnhancedCampaignHierarchy {
         };
 
         return `
-            <div class="metric">
-                <div class="metric-value">$${metrics.spend.toFixed(2)}</div>
+            <div class="metric-item">
                 <div class="metric-label">Spend</div>
+                <div class="metric-value">$${metrics.spend.toFixed(2)}</div>
             </div>
-            <div class="metric">
-                <div class="metric-value">${metrics.impressions.toLocaleString()}</div>
+            <div class="metric-item">
                 <div class="metric-label">Impressions</div>
+                <div class="metric-value">${metrics.impressions.toLocaleString()}</div>
             </div>
-            <div class="metric">
-                <div class="metric-value">${metrics.clicks.toLocaleString()}</div>
+            <div class="metric-item">
                 <div class="metric-label">Clicks</div>
+                <div class="metric-value">${metrics.clicks.toLocaleString()}</div>
             </div>
-            <div class="metric">
-                <div class="metric-value">${metrics.ctr.toFixed(2)}%</div>
+            <div class="metric-item">
                 <div class="metric-label">CTR</div>
+                <div class="metric-value">${metrics.ctr.toFixed(2)}%</div>
             </div>
-            <div class="metric">
-                <div class="metric-value">$${metrics.cpc.toFixed(2)}</div>
+            <div class="metric-item">
                 <div class="metric-label">CPC</div>
+                <div class="metric-value">$${metrics.cpc.toFixed(2)}</div>
             </div>
-            <div class="metric">
+            <div class="metric-item">
+                <div class="metric-label">Conv.</div>
                 <div class="metric-value">${metrics.conversions}</div>
-                <div class="metric-label">Conversions</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">${metrics.conversion_rate.toFixed(2)}%</div>
-                <div class="metric-label">Conv. Rate</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">$${metrics.cpa.toFixed(2)}</div>
-                <div class="metric-label">CPA</div>
             </div>
         `;
     }
@@ -412,7 +428,8 @@ class EnhancedCampaignHierarchy {
             if (isLast) {
                 html += `<li class="breadcrumb-item active">${crumb.name}</li>`;
             } else {
-                html += `<li class="breadcrumb-item"><a href="#" data-level="${this.currentLevel}" data-id="${crumb.id}">${crumb.name}</a></li>`;
+                const level = index === 0 ? 'adsets' : 'ads';
+                html += `<li class="breadcrumb-item"><a href="#" data-level="${level}" data-id="${crumb.id}">${crumb.name}</a></li>`;
             }
         });
         
@@ -443,17 +460,32 @@ class EnhancedCampaignHierarchy {
 
     drillDown(id, name) {
         this.breadcrumbs.push({ id, name });
-        this.currentLevel = this.getNextLevel().toLowerCase().replace(' ', '_');
+        
+        if (this.currentLevel === 'campaigns') {
+            this.currentLevel = 'adsets';
+        } else if (this.currentLevel === 'adsets') {
+            this.currentLevel = 'ads';
+        }
+        
         this.renderLevel();
     }
 
     navigateToLevel(level, id) {
-        const index = this.breadcrumbs.findIndex(crumb => crumb.id === id);
-        if (index !== -1) {
-            this.breadcrumbs = this.breadcrumbs.slice(0, index + 1);
-            this.currentLevel = level;
-            this.renderLevel();
+        if (level === 'campaigns') {
+            // Reset to campaigns view
+            this.breadcrumbs = [];
+            this.currentLevel = 'campaigns';
+        } else if (level === 'adsets') {
+            // Find the index of the campaign with this ID
+            const index = this.breadcrumbs.findIndex(crumb => crumb.id === id);
+            if (index !== -1) {
+                // Keep only the campaign breadcrumb
+                this.breadcrumbs = this.breadcrumbs.slice(0, 1);
+                this.currentLevel = 'adsets';
+            }
         }
+        
+        this.renderLevel();
     }
 
     showError(message) {
@@ -502,7 +534,7 @@ class EnhancedCampaignHierarchy {
     }
 }
 
-// Initialize the enhanced campaign hierarchy when the DOM is loaded
+// Initialize the enhanced campaign hierarchy
 document.addEventListener('DOMContentLoaded', function() {
     // Check if we're on the dashboard page with campaign hierarchy
     if (document.getElementById('campaignHierarchy')) {

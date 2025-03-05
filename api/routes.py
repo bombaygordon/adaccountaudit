@@ -136,12 +136,26 @@ def fetch_campaigns(account_id: str) -> List[Dict[str, Any]]:
                             'clicks',
                             'conversions',
                             'ctr',
-                            'cpc'
+                            'cpc',
+                            'conversion_rate',
+                            'cost_per_conversion',
+                            'cost_per_action_type',
+                            'actions',
+                            'action_values'
                         ],
                         params={'date_preset': 'last_30d'}
                     )
                     if insights and len(insights) > 0:
                         campaign_data.update(insights[0].export_data())
+                        # Calculate CPA from cost_per_conversion if available
+                        if 'cost_per_conversion' in insights[0]:
+                            campaign_data['cpa'] = insights[0]['cost_per_conversion']
+                        # Calculate conversion rate from actions if available
+                        if 'actions' in insights[0] and 'clicks' in insights[0]:
+                            for action in insights[0]['actions']:
+                                if action['action_type'] == 'purchase':
+                                    campaign_data['conversion_rate'] = (action['value'] / insights[0]['clicks']) * 100
+                                    break
                     else:
                         # Add default values if no insights
                         campaign_data.update({
@@ -150,7 +164,9 @@ def fetch_campaigns(account_id: str) -> List[Dict[str, Any]]:
                             'clicks': 0,
                             'conversions': 0,
                             'ctr': 0,
-                            'cpc': 0
+                            'cpc': 0,
+                            'conversion_rate': 0,
+                            'cpa': 0
                         })
                 except Exception as e:
                     logger.warning(f"Failed to get insights for campaign {campaign_data['id']}: {e}")
@@ -160,7 +176,9 @@ def fetch_campaigns(account_id: str) -> List[Dict[str, Any]]:
                         'clicks': 0,
                         'conversions': 0,
                         'ctr': 0,
-                        'cpc': 0
+                        'cpc': 0,
+                        'conversion_rate': 0,
+                        'cpa': 0
                     })
                 
                 campaigns_data.append(campaign_data)
@@ -394,160 +412,60 @@ def fetch_ads(adset_id: str) -> List[Dict[str, Any]]:
         return []  # Return empty list instead of raising to allow partial data
 
 @api_bp.route('/campaign-hierarchy', methods=['POST'])
-def get_campaign_hierarchy(account_id: str = None) -> Dict[str, Any]:
-    """Get the campaign hierarchy for a Facebook ad account"""
+@login_required
+def get_campaign_hierarchy():
+    """Get the complete campaign hierarchy"""
     try:
-        # Get data from request
-        data = request.json or {}
+        data = request.get_json()
+        access_token = data.get('accessToken')
+        account_id = data.get('accountId')
         
-        # If account_id is not passed directly, get from request data
-        if account_id is None:
-            access_token = data.get('accessToken')
-            account_id = data.get('accountId')
-            
-            if not access_token or not account_id:
-                logger.error("Missing access token or account ID in request")
-                return jsonify({
-                    'success': False,
-                    'error': 'Missing access token or account ID'
-                }), 400
-            
-            # Initialize Facebook API
-            try:
-                FacebookAdsApi.init(access_token=access_token)
-                logger.info(f"Facebook API initialized for account {account_id}")
-            except Exception as e:
-                logger.error(f"Error initializing Facebook API: {str(e)}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Failed to initialize Facebook API: {str(e)}'
-                }), 500
-        
-        # Get campaign data with rate limiting
-        try:
-            campaigns = fetch_campaigns(account_id)
-            if not campaigns:
-                logger.warning(f"No campaigns found for account {account_id}")
-                return jsonify({
-                    'success': True,
-                    'hierarchy': []
-                })
-                
-            hierarchy = []
-            
-            for campaign in campaigns:
-                try:
-                    campaign_id = campaign.get('id')
-                    if not campaign_id:
-                        logger.warning(f"Campaign missing ID: {campaign}")
-                        continue
-                        
-                    adsets = fetch_adsets(campaign_id)
-                    campaign_data = {
-                        'id': campaign_id,
-                        'name': campaign.get('name', 'Unnamed Campaign'),
-                        'status': campaign.get('status', 'UNKNOWN'),
-                        'objective': campaign.get('objective', 'UNKNOWN'),
-                        'daily_budget': campaign.get('daily_budget', 0),
-                        'lifetime_budget': campaign.get('lifetime_budget', 0),
-                        'spend': campaign.get('spend', 0),
-                        'impressions': campaign.get('impressions', 0),
-                        'clicks': campaign.get('clicks', 0),
-                        'conversions': campaign.get('conversions', 0),
-                        'ctr': campaign.get('ctr', 0),
-                        'cpc': campaign.get('cpc', 0),
-                        'ad_sets': []
-                    }
-                    
-                    for adset in adsets:
-                        try:
-                            adset_id = adset.get('id')
-                            if not adset_id:
-                                logger.warning(f"Ad set missing ID: {adset}")
-                                continue
-                                
-                            ads = fetch_ads(adset_id)
-                            adset_data = {
-                                'id': adset_id,
-                                'name': adset.get('name', 'Unnamed Ad Set'),
-                                'campaign_id': adset.get('campaign_id'),
-                                'optimization_goal': adset.get('optimization_goal', 'UNKNOWN'),
-                                'daily_budget': adset.get('daily_budget', 0),
-                                'lifetime_budget': adset.get('lifetime_budget', 0),
-                                'bid_strategy': adset.get('bid_strategy'),
-                                'billing_event': adset.get('billing_event'),
-                                'status': adset.get('status', 'UNKNOWN'),
-                                'spend': adset.get('spend', 0),
-                                'impressions': adset.get('impressions', 0),
-                                'clicks': adset.get('clicks', 0),
-                                'conversions': adset.get('conversions', 0),
-                                'ctr': adset.get('ctr', 0),
-                                'cpc': adset.get('cpc', 0),
-                                'ads': []
-                            }
-                            
-                            for ad in ads:
-                                try:
-                                    ad_id = ad.get('id')
-                                    if not ad_id:
-                                        logger.warning(f"Ad missing ID: {ad}")
-                                        continue
-                                        
-                                    adset_data['ads'].append({
-                                        'id': ad_id,
-                                        'name': ad.get('name', 'Unnamed Ad'),
-                                        'campaign_id': ad.get('campaign_id'),
-                                        'adset_id': ad.get('adset_id'),
-                                        'status': ad.get('status', 'UNKNOWN'),
-                                        'spend': ad.get('spend', 0),
-                                        'impressions': ad.get('impressions', 0),
-                                        'clicks': ad.get('clicks', 0),
-                                        'conversions': ad.get('conversions', 0),
-                                        'ctr': ad.get('ctr', 0),
-                                        'cpc': ad.get('cpc', 0),
-                                        'quality_ranking': ad.get('quality_ranking', 'UNKNOWN'),
-                                        'engagement_rate_ranking': ad.get('engagement_rate_ranking', 'UNKNOWN'),
-                                        'conversion_rate_ranking': ad.get('conversion_rate_ranking', 'UNKNOWN')
-                                    })
-                                except Exception as e:
-                                    logger.error(f"Error processing ad {ad.get('id', 'UNKNOWN')}: {str(e)}")
-                                    continue
-                            
-                            campaign_data['ad_sets'].append(adset_data)
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing ad set {adset.get('id', 'UNKNOWN')}: {str(e)}")
-                            continue
-                    
-                    hierarchy.append(campaign_data)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing campaign {campaign.get('id', 'UNKNOWN')}: {str(e)}")
-                    continue
-            
-            response = {
-                'success': True,
-                'hierarchy': hierarchy
-            }
-            return jsonify(response) if account_id is None else response
-            
-        except Exception as e:
-            error_msg = f"Error getting campaign hierarchy: {str(e)}"
-            logger.error(error_msg)
-            error_response = {
+        if not access_token or not account_id:
+            return jsonify({
                 'success': False,
-                'error': error_msg
-            }
-            return jsonify(error_response) if account_id is None else error_response
+                'error': 'Missing access token or account ID'
+            }), 400
+        
+        # Initialize Facebook API
+        FacebookAdsApi.init(access_token=access_token)
+        
+        # Fetch campaigns
+        campaigns = fetch_campaigns(account_id)
+        
+        # For each campaign, fetch its ad sets
+        for campaign in campaigns:
+            campaign['ad_sets'] = fetch_adsets(campaign['id'])
             
+            # For each ad set, fetch its ads
+            for adset in campaign['ad_sets']:
+                adset['ads'] = fetch_ads(adset['id'])
+        
+        # Convert all data to JSON-serializable format
+        def convert_to_serializable(obj):
+            if isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(item) for item in obj]
+            elif hasattr(obj, 'export_data'):
+                return obj.export_data()
+            elif isinstance(obj, (int, float, str, bool, type(None))):
+                return obj
+            else:
+                return str(obj)
+        
+        serialized_hierarchy = convert_to_serializable(campaigns)
+        
+        return jsonify({
+            'success': True,
+            'hierarchy': serialized_hierarchy
+        })
+        
     except Exception as e:
-        error_msg = f"Error in get_campaign_hierarchy: {str(e)}"
-        logger.error(error_msg)
-        error_response = {
+        logger.error(f"Error fetching campaign hierarchy: {str(e)}")
+        return jsonify({
             'success': False,
-            'error': error_msg
-        }
-        return jsonify(error_response) if account_id is None else error_response
+            'error': str(e)
+        }), 500
 
 @api_bp.route('/connect', methods=['POST'])
 @login_required
@@ -621,78 +539,47 @@ def connect_facebook():
 @api_bp.route('/connect/facebook-oauth', methods=['POST'])
 @login_required
 def connect_facebook_oauth():
-    """Connect to Facebook Ads API using OAuth"""
+    """Handle Facebook OAuth connection"""
     try:
-        data = request.json or {}
-        logger.info("Received Facebook OAuth connection request")
+        data = request.get_json()
+        access_token = data.get('access_token')
+        account_id = data.get('account_id')
         
-        # Check for required fields
-        if 'access_token' not in data or 'account_id' not in data:
-            logger.error("Missing access token or account ID in request")
+        if not access_token or not account_id:
             return jsonify({
                 'success': False,
                 'error': 'Missing access token or account ID'
             }), 400
         
-        access_token = data['access_token']
-        account_id = data['account_id']
-        
-        logger.info(f"Processing OAuth request for account ID: {account_id}")
-        
-        # Test the access token by making a simple API call
-        test_url = f"https://graph.facebook.com/v18.0/act_{account_id}/campaigns?fields=id,name&limit=1&access_token={access_token}"
-        response = requests.get(test_url)
-        response_data = response.json()
-        
-        if response.status_code != 200:
-            error_data = response_data.get('error', {})
-            logger.error(f"Facebook API validation failed: {error_data}")
-            return jsonify({
-                'success': False,
-                'error': error_data.get('message', 'Failed to validate access token')
-            }), 401
-        
-        logger.info("Facebook access token validated successfully")
-        
-        # Store the credentials in the database
+        # Validate the access token
         try:
-            current_user.facebook_credentials = {
-                'access_token': access_token,
-                'account_id': account_id
-            }
-            db.session.commit()
-            logger.info("Stored Facebook credentials in database")
-        except Exception as db_error:
-            logger.error(f"Failed to store credentials in database: {str(db_error)}")
-        
-        # Store in session as backup
-        try:
+            # Initialize the Facebook API
+            FacebookAdsApi.init(access_token=access_token)
+            
+            # Try to access the account
+            account = AdAccount(f'act_{account_id}')
+            account.api_get(fields=['id', 'name'])
+            
+            # Store the credentials in the session
             session['fb_credentials'] = {
                 'access_token': access_token,
                 'account_id': account_id
             }
-            logger.info("Stored Facebook credentials in session")
-        except Exception as session_error:
-            logger.error(f"Failed to store credentials in session: {str(session_error)}")
-            if not hasattr(current_user, 'facebook_credentials'):
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to store credentials'
-                }), 500
-        
-        return jsonify({
-            'success': True,
-            'account_id': account_id,
-            'message': 'Successfully connected to Facebook Ads'
-        })
-    except requests.RequestException as e:
-        logger.error(f"Request error validating Facebook token: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Failed to validate Facebook access token'
-        }), 500
+            
+            return jsonify({
+                'success': True,
+                'message': 'Facebook account connected successfully'
+            })
+            
+        except Exception as e:
+            logger.error(f"Error validating Facebook credentials: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid Facebook credentials'
+            }), 401
+            
     except Exception as e:
-        logger.error(f"Error in Facebook OAuth connection: {str(e)}", exc_info=True)
+        logger.error(f"Error connecting Facebook account: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -833,7 +720,7 @@ def audit_facebook():
         
         # Get campaign hierarchy
         try:
-            hierarchy_result = get_campaign_hierarchy(account_id)
+            hierarchy_result = get_campaign_hierarchy()
             if not hierarchy_result.get('success', False):
                 error_msg = hierarchy_result.get('error', 'Failed to get campaign data')
                 logger.error(f"Error getting campaign hierarchy: {error_msg}")

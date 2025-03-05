@@ -10,6 +10,17 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-for-development'
     DEBUG = os.environ.get('DEBUG') or True
     
+    # Session and cookie settings
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    
+    # Security settings for ngrok
+    PREFERRED_URL_SCHEME = 'https'
+    
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URI') or 'sqlite:///app_new.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False

@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-03-05T14:59:10.647129",
+  "platform": "facebook",
+  "account_overview": {
+    "total_spend": 2000.0,
+    "total_impressions": 150000,
+    "total_clicks": 5500,
+    "total_conversions": 55,
+    "total_revenue": 0,
+    "ctr": 3.6666666666666665,
+    "cpc": 0.36363636363636365,
+    "cpm": 13.333333333333334,
+    "conversion_rate": 1.0,
+    "cpa": 36.36363636363637,
+    "roas": 0,
+    "active_campaigns": 2,
+    "total_campaigns": 2
+  },
+  "insights": {},
+  "recommendations": [],
+  "ai_recommendations": [],
+  "metrics": {},
+  "potential_savings": 0,
+  "potential_improvement_percentage": 0
+}

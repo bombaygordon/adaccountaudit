@@ -97,23 +97,10 @@
                     tokenLength: accessToken ? accessToken.length : 0
                 });
                 
-                // Store access token both individually and in the credentials object
+                // Store access token
                 sessionStorage.setItem('fb_access_token', accessToken);
                 
-                // Initialize fb_credentials with the access token
-                const fbCredentials = {
-                    fb_access_token: accessToken,
-                    fb_account_id: null  // Will be set when account is selected
-                };
-                sessionStorage.setItem('fb_credentials', JSON.stringify(fbCredentials));
-                
-                console.log('Initial credentials stored:', {
-                    has_access_token: true,
-                    access_token_length: accessToken.length,
-                    stored_credentials: JSON.parse(sessionStorage.getItem('fb_credentials'))
-                });
-                
-                // First, get personal ad accounts
+                // Get ad accounts
                 FB.api('/me/adaccounts', {fields: 'id,name,account_status'}, function(adAccountResponse) {
                     let allAccounts = [];
                     
@@ -218,24 +205,6 @@
             this.disabled = true;
             this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Connecting...';
             
-            // Validate token before proceeding
-            try {
-                const tokenCheckResponse = await fetch(`https://graph.facebook.com/v18.0/me?access_token=${accessToken}`);
-                const tokenCheck = await tokenCheckResponse.json();
-                
-                if (tokenCheck.error) {
-                    throw new Error('Invalid token');
-                }
-                
-                console.log('Token validation successful:', {
-                    user_id: tokenCheck.id,
-                    token_valid: true
-                });
-            } catch (tokenError) {
-                console.error('Token validation failed:', tokenError);
-                throw new Error('Facebook token is invalid or expired. Please reconnect your account.');
-            }
-            
             // Save the connection to your backend
             const response = await fetch('/api/connect/facebook-oauth', {
                 method: 'POST',
@@ -250,139 +219,53 @@
             
             const result = await response.json();
             
-            // Reset button
-            this.disabled = false;
-            this.innerHTML = 'Connect Account';
-            
-            // Show result
-            const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+            // Show result in modal
+            const modal = new bootstrap.Modal(document.getElementById('resultModal'));
             const resultTitle = document.getElementById('resultTitle');
             const resultMessage = document.getElementById('resultMessage');
             const goDashboardBtn = document.getElementById('goDashboardBtn');
             
             if (result.success) {
-                resultTitle.textContent = 'Connection Successful';
-                resultMessage.innerHTML = '<div class="alert alert-success">Your Facebook Ads account has been connected successfully!</div>';
+                resultTitle.textContent = 'Success!';
+                resultMessage.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        ${result.message}
+                    </div>
+                `;
                 goDashboardBtn.style.display = 'block';
                 
-                // Format account ID properly (ensure it has 'act_' prefix)
-                const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-                
-                // Store Facebook credentials for future use
+                // Store credentials in session storage
                 const fbCredentials = {
-                    fb_access_token: accessToken,
-                    fb_account_id: formattedAccountId
+                    access_token: accessToken,
+                    account_id: accountId
                 };
-                
-                // Store both the individual token and the credentials object
-                sessionStorage.setItem('fb_access_token', accessToken);
                 sessionStorage.setItem('fb_credentials', JSON.stringify(fbCredentials));
                 
-                // Log stored credentials (without exposing the actual token)
-                console.log('Stored Facebook credentials:', {
-                    has_access_token: true,
-                    access_token_length: accessToken.length,
-                    account_id: formattedAccountId
-                });
-                
-                // Update the Go to Dashboard button to verify credentials before redirecting
-                goDashboardBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    
-                    // Double check credentials before redirect
-                    const finalCheck = sessionStorage.getItem('fb_credentials');
-                    const parsedCreds = finalCheck ? JSON.parse(finalCheck) : null;
-                    const separateToken = sessionStorage.getItem('fb_access_token');
-                    
-                    console.log('Final credential check before redirect:', {
-                        has_credentials: !!finalCheck,
-                        has_token: parsedCreds?.fb_access_token?.length > 0,
-                        has_account: !!parsedCreds?.fb_account_id,
-                        account_format: parsedCreds?.fb_account_id,
-                        separate_token: {
-                            exists: !!separateToken,
-                            length: separateToken ? separateToken.length : 0
-                        }
-                    });
-                    
-                    if (!finalCheck || !parsedCreds?.fb_access_token || !parsedCreds?.fb_account_id) {
-                        console.error('Missing or invalid credentials before redirect');
-                        
-                        // Try to restore from separate token if available
-                        if (separateToken && formattedAccountId) {
-                            console.log('Attempting to restore credentials from separate token');
-                            const restoredCreds = {
-                                fb_access_token: separateToken,
-                                fb_account_id: formattedAccountId
-                            };
-                            sessionStorage.setItem('fb_credentials', JSON.stringify(restoredCreds));
-                            
-                            // Verify restoration
-                            const verifyRestore = sessionStorage.getItem('fb_credentials');
-                            console.log('Restored credentials:', {
-                                success: !!verifyRestore,
-                                restored_creds: verifyRestore ? JSON.parse(verifyRestore) : null
-                            });
-                            
-                            if (!verifyRestore) {
-                                alert('Error: Could not restore Facebook credentials. Please reconnect your account.');
-                                return;
-                            }
-                        } else {
-                            alert('Error: Facebook credentials not found. Please reconnect your account.');
-                            return;
-                        }
-                    }
-                    
-                    // Validate token one final time before redirect
-                    fetch(`https://graph.facebook.com/v18.0/me?access_token=${parsedCreds.fb_access_token}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.error) {
-                                throw new Error('Invalid token');
-                            }
-                            
-                            console.log('Final token validation successful');
-                            
-                            // Add connection indicator to URL
-                            const dashboardUrl = new URL(this.getAttribute('href'), window.location.origin);
-                            dashboardUrl.searchParams.set('fb_connected', 'true');
-                            
-                            // Redirect to dashboard
-                            window.location.href = dashboardUrl.toString();
-                        })
-                        .catch(error => {
-                            console.error('Final token validation failed:', error);
-                            sessionStorage.removeItem('fb_credentials');
-                            sessionStorage.removeItem('fb_access_token');
-                            alert('Your Facebook connection appears to be invalid. Please reconnect your account.');
-                        });
+                console.log('Facebook credentials stored:', {
+                    hasCredentials: !!sessionStorage.getItem('fb_credentials'),
+                    credentials: fbCredentials
                 });
             } else {
-                resultTitle.textContent = 'Connection Failed';
-                resultMessage.innerHTML = `<div class="alert alert-danger">Failed to connect: ${result.error || 'Unknown error'}</div>`;
-                goDashboardBtn.style.display = 'none';
-                
-                // Clear credentials on failure
-                sessionStorage.removeItem('fb_credentials');
-                sessionStorage.removeItem('fb_access_token');
+                resultTitle.textContent = 'Error';
+                resultMessage.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        ${result.error || 'Failed to connect Facebook account'}
+                    </div>
+                `;
             }
             
-            resultModal.show();
+            modal.show();
+            
         } catch (error) {
             console.error('Error connecting account:', error);
+            alert('Failed to connect account. Please try again.');
+        } finally {
+            // Reset button state
             this.disabled = false;
             this.innerHTML = 'Connect Account';
-            alert('Error connecting account. Please try again.');
-            
-            // Clear credentials on error
-            sessionStorage.removeItem('fb_credentials');
-            sessionStorage.removeItem('fb_access_token');
         }
     });
-    
-    function showError(message) {
-        alert(message);
-    }
 </script>
 {% endblock %}

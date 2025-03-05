@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, redirect, url_for, request, flash
+from flask import Blueprint, render_template, jsonify, redirect, url_for, request, flash, Response
 from flask_login import login_required, current_user
 import requests
 from auth.models import Client, db
@@ -6,11 +6,46 @@ from auth.forms import ClientForm
 
 web_bp = Blueprint('web', __name__, template_folder='templates')
 
+@web_bp.route('/test')
+def test():
+    """Basic test endpoint"""
+    return "Hello from Flask!"
+
 @web_bp.route('/')
 def index():
-    if not current_user.is_authenticated:
-        return redirect(url_for('auth.login'))
-    return render_template('dashboard.html')
+    """Main dashboard page"""
+    print("\n=== Index Route ===")
+    print(f"User authenticated: {current_user.is_authenticated}")
+    
+    try:
+        if not current_user.is_authenticated:
+            print("Redirecting to login...")
+            return redirect(url_for('auth.login'))
+        
+        print("Rendering dashboard...")
+        return render_template('dashboard.html')
+    except Exception as e:
+        print(f"Error in index route: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return render_template('error.html', error=str(e))
+
+@web_bp.route('/login')
+def login_page():
+    """Direct login page for testing"""
+    return render_template('auth/login.html')
+
+@web_bp.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "ok",
+        "auth_status": "authenticated" if current_user.is_authenticated else "not authenticated",
+        "debug_info": {
+            "request_headers": dict(request.headers),
+            "request_url": request.url
+        }
+    })
 
 @web_bp.route('/data')
 @login_required
@@ -121,3 +156,8 @@ def facebook_audit():
 
     return render_template('audits/facebook.html', title='Facebook Ads Audit', 
                            client=client, clients=clients)
+
+@web_bp.route('/debug')
+def debug_info():
+    """Simplified debug endpoint"""
+    return Response("Debug endpoint reached", mimetype='text/plain')

@@ -178,4 +178,11 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   }
+
+  // Helper function to check if we're on the dashboard page
+  function isDashboardPage() {
+    return document.getElementById('recommendationsContainer') !== null || 
+           document.getElementById('platformsAudited') !== null ||
+           document.querySelector('.dashboard-content') !== null;
+  }
 }); 
